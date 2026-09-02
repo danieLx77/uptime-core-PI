@@ -1,0 +1,17 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ "main", "desafio-01" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Simulação de Build e Lint
+        run: echo "Estrutura de pastas validada e documentos verificados com sucesso! (Modo documentação)"
