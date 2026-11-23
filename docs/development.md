@@ -44,8 +44,8 @@ git --version
 Clone o repositório:
 
 ```bash
-git clone https://github.com/joaogsribeiro/uptime-core-api.git
-cd uptime-core-api
+git clone https://github.com/danieLx77/uptime-core-PI.git
+cd uptime-core-PI
 ```
 
 Instale as dependências:
@@ -325,6 +325,7 @@ Isso garante que:
 | `npm run dev` | Inicia a API em desenvolvimento com Nodemon |
 | `npm start` | Inicia a API sem Nodemon |
 | `npm run lint` | Executa ESLint |
+| `npm run test:architecture` | Verifica as fronteiras dos módulos e testa as regras |
 | `npm run lint:fix` | Corrige problemas de lint automaticamente quando possível |
 | `npm run db:migrate` | Aplica migrations do Prisma |
 | `npm test` | Executa testes com Jest |
@@ -465,6 +466,10 @@ http://localhost:3000/api/docs
 ```
 
 ## 🔄 Fluxo de Desenvolvimento Recomendado
+
+Trabalhe na branch do desafio. Use Conventional Commits com descrições em português brasileiro. Descreva no PR o contexto, os objetivos, as decisões e justificativas, os impactos, a documentação, os resultados dos testes, os critérios de aceitação, as limitações e a forma de reproduzir a validação.
+
+Consulte as [fronteiras da arquitetura](architecture.md#comunicação-e-proteção-de-fronteiras) ao alterar imports. Atualize a visão do produto quando o domínio evoluir e registre decisões arquiteturais relevantes em `docs/adr/`. Inclua `npm run test:architecture` na verificação antes de publicar.
 
 Um fluxo saudável para trabalhar no projeto:
 

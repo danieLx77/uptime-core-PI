@@ -7,6 +7,15 @@ API de monitoramento HTTP com cadastro de monitores, checagens agendadas, histó
 - [Equipe](docs/equipe.md)
 - [ADR 0000 — Registro de decisões de arquitetura](docs/adr/0000-registro-de-decisoes.md)
 
+## Arquitetura
+
+O código em `src/modules/` forma um monólito modular com Identidade e acesso, Monitoramento, Incidentes e Notificações. A composição HTTP está em `src/app.js` e `src/routes/adminRoutes.js`. A composição do ciclo fica em `src/monitoringWorkflow.js`.
+
+- [Arquitetura, contextos e diagramas C4](docs/architecture.md)
+- [Domínio e Event Storming](docs/dominio.md)
+- [ADR 0001 — Monólito modular](docs/adr/0001-monolito-modular.md)
+- [Vitrine do D2](docs/vitrine-d2.md)
+
 ## Ambiente de desenvolvimento
 
 Use Node.js 24, npm e um PostgreSQL dedicado ao Uptime Core PI. Se usar Docker para o banco, confira se a porta `5432` e o nome de contêiner do [Compose](docker-compose.yml) estão livres.
@@ -47,10 +56,11 @@ JWT_SECRET=uptime-local-test-signing-key
 npm exec -- prisma generate
 npm run swagger
 npm run lint
+npm run test:architecture
 env -u DATABASE_URL npm run test:db-setup
 env -u DATABASE_URL npm test -- --coverage
 ```
 
-A [CI da API](.github/workflows/ci.yml) roda em PRs para `main` e em pushes para `main` e `desafio-01`. Ela usa Node.js 24 e um PostgreSQL descartável próprio do job para aplicar migrations e rodar os testes com cobertura.
+A [CI da API](.github/workflows/ci.yml) roda em PRs para `main` e em pushes para `main` e `desafio-01`. Ela usa Node.js 24 e um PostgreSQL descartável próprio do job para aplicar migrations e rodar os testes com cobertura. A verificação arquitetural também pode rodar localmente sem PostgreSQL.
 
 A documentação de [API](docs/api.md), [desenvolvimento](docs/development.md) e [operação](docs/operations.md) foi importada da origem e inclui referências históricas ao GitHub, SonarCloud e Render originais. Para o ambiente acadêmico, siga os comandos acima.
