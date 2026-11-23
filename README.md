@@ -5,7 +5,7 @@ API de monitoramento HTTP com cadastro de monitores, checagens agendadas, histó
 
 - [Visão do produto](docs/visao-produto.md)
 - [Equipe](docs/equipe.md)
-- [Diagnóstico e plano de adaptação](docs/assessment/README.md)
+- [ADR 0000 — Registro de decisões de arquitetura](docs/adr/0000-registro-de-decisoes.md)
 
 ## Ambiente de desenvolvimento
 
@@ -53,4 +53,4 @@ env -u DATABASE_URL npm test -- --coverage
 
 A [CI da API](.github/workflows/ci.yml) roda em PRs para `main` e em pushes para `main` e `desafio-01`. Ela usa Node.js 24 e um PostgreSQL descartável próprio do job para aplicar migrations e rodar os testes com cobertura.
 
-A documentação de [API](docs/api.md), [desenvolvimento](docs/development.md) e [operação](docs/operations.md) foi importada da origem e inclui referências históricas ao GitHub, SonarCloud e Render originais. Para o ambiente acadêmico, siga os comandos acima e consulte as [limitações verificadas](docs/assessment/01-importacao.md#validação-do-d1).
+A documentação de [API](docs/api.md), [desenvolvimento](docs/development.md) e [operação](docs/operations.md) foi importada da origem e inclui referências históricas ao GitHub, SonarCloud e Render originais. Para o ambiente acadêmico, siga os comandos acima.
