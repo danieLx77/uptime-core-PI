@@ -30,4 +30,4 @@ env -u DATABASE_URL npm test -- --runTestsByPath tests/integration/monitoringWor
 npm run test:architecture
 ```
 
-O verificador arquitetural e a configuração do Compose foram executados localmente. A sequência com PostgreSQL e servidor HTTP precisa ser ensaiada em um ambiente que permita sockets e instale as dependências do lockfile. O teste usa um alvo local. O SMTP fica fora da demonstração.
+O verificador arquitetural e a configuração do Compose foram executados localmente. A sequência com PostgreSQL e servidor HTTP passou na CI. Antes da apresentação, ensaie o roteiro completo no computador da equipe. O teste usa um alvo local. O SMTP fica fora da demonstração.

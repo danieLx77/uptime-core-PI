@@ -191,7 +191,7 @@ Essa secret deve conter a URL do deploy hook gerado pela Render.
 
 ## 🔁 CI/CD
 
-A [CI da API](../.github/workflows/ci.yml) usa GitHub Actions em PRs para `main` e em pushes para `main` e `desafio-01`. O job usa Node 24 e PostgreSQL 15 descartável com porta atribuída pelo runner. Executa `npm ci`, gera Prisma Client e Swagger, passa pelo lint e pelo guard arquitetural, aplica migrations e executa a suíte com cobertura. A etapa final verifica a inicialização do servidor e do scheduler, o endpoint de health e a documentação Swagger.
+A [CI da API](../.github/workflows/ci.yml) usa GitHub Actions em PRs para `main` e em pushes para `main` e `desafio-01`. O job usa Node 24 e PostgreSQL 15 descartável com porta atribuída pelo runner. Executa `npm ci`, gera Prisma Client e Swagger, passa pelo lint e pelo guard arquitetural, aplica migrations e verifica o servidor e o scheduler em banco vazio, incluindo health e Swagger. Por fim, executa a suíte com cobertura.
 
 ## 🩺 Health Check
 

@@ -77,12 +77,12 @@ O recorte inicial sugerido para dois serviços é **Núcleo** e **Incidentes**, 
 | Critério | Evidência | Situação |
 |---|---|---|
 | Monólito modular e pelo menos três contextos | Quatro pontos públicos, persistência com acesso por proprietário e composição no mesmo processo | Implementado e verificado por inspeção e guard |
-| Um fluxo funcional ponta a ponta | [Teste do ciclo](../tests/integration/monitoringWorkflow.test.js) com PostgreSQL, Express, scheduler e alvo HTTP local | Implementado, execução com dependências e sockets pendente |
-| Aplicação demonstrável | [Roteiro da vitrine](vitrine-d2.md), configuração do Compose aceita e migrations SQL verificadas | Inicialização e demonstração completa pendentes |
+| Um fluxo funcional ponta a ponta | [Teste do ciclo](../tests/integration/monitoringWorkflow.test.js) com PostgreSQL, Express, scheduler e alvo HTTP local | Aprovado na CI com PostgreSQL 15 |
+| Aplicação demonstrável | [Roteiro da vitrine](vitrine-d2.md), configuração do Compose aceita e migrations SQL verificadas | Inicialização do servidor e scheduler, health e Swagger aprovados na CI. Ensaio da apresentação pendente |
 | Diagrama, domínio e decisões | [Domínio](dominio.md), diagramas acima e [ADR 0001](adr/0001-monolito-modular.md) | Documentado |
-| Processo de entrega | [CI](../.github/workflows/ci.yml) com guard e suíte do D1 preservada | Execução remota do D2 pendente |
+| Processo de entrega | [CI](../.github/workflows/ci.yml) com guard e suíte do D1 preservada | CI do D2 aprovada |
 
-A baseline é o [D1 integrado na main](https://github.com/danieLx77/uptime-core-PI/commit/0b9f25b4202c59cc7578520d993321287a7bcf6d). A [CI do conteúdo equivalente do PR #2](https://github.com/danieLx77/uptime-core-PI/actions/runs/45288425997) registrou 58 testes aprovados, 11 suítes e cobertura de 85,51% de linhas e 60% de branches. A comparação de cobertura do D2 depende da execução da suíte. Configurações administrativas de GitHub Projects, branch protection e SonarCloud requerem confirmação externa.
+A baseline é o [D1 integrado na main](https://github.com/danieLx77/uptime-core-PI/commit/0b9f25b4202c59cc7578520d993321287a7bcf6d). A [CI do conteúdo equivalente do PR #2](https://github.com/danieLx77/uptime-core-PI/actions/runs/45288425997) registrou 58 testes aprovados, 11 suítes e cobertura de 85,51% de linhas e 60% de branches. A [CI do D2](https://github.com/danieLx77/uptime-core-PI/actions/runs/45291562791) registrou 59 testes aprovados em 12 suítes, além de 5 verificações de arquitetura. A cobertura foi de 86,08% de linhas, 67,58% de branches e 90,47% de funções. Na baseline, a cobertura de funções foi de 93,75%. O parser do Compose passou localmente. O daemon Docker estava indisponível para executar a composição completa. Configurações administrativas de GitHub Projects, branch protection e SonarCloud requerem confirmação externa.
 
 ## Leitura complementar
 
