@@ -5,9 +5,8 @@ import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './config/swagger.js';
 import { globalErrorHandler } from './middlewares/errorMiddleware.js';
 import adminRoutes from './routes/adminRoutes.js';
-import authRoutes from './routes/authRoutes.js';
-import monitorRoutes from './routes/monitorRoutes.js';
-import userRoutes from './routes/userRoutes.js';
+import { authenticate, authRoutes, userRoutes } from './modules/identity/index.js';
+import { monitorRoutes } from './modules/monitoring/index.js';
 import AppError from './utils/AppError.js';
 
 const app = express();
@@ -76,9 +75,9 @@ app.get('/api/health', (req, res) => {
 // Rotas de Autenticação (Públicas)
 app.use('/api/auth', authRoutes);
 
-// Rotas de Domínio (Protegidas por JWT internamente nos arquivos de rota)
+// Rotas de domínio protegidas por JWT
 app.use('/api/users', userRoutes);
-app.use('/api/monitors', monitorRoutes);
+app.use('/api/monitors', authenticate, monitorRoutes);
 
 // Rotas Administrativas (Protegidas por JWT + Admin Middleware)
 app.use('/api/admin', adminRoutes);

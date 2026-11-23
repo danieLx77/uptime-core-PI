@@ -1,7 +1,8 @@
 import { jest } from '@jest/globals';
 import prisma from '../../src/config/database.js';
-import AlertService from '../../src/services/AlertService.js';
-import IncidentService from '../../src/services/IncidentService.js';
+import { findAlertRecipient } from '../../src/modules/monitoring/index.js';
+import { alertService } from '../../src/modules/notifications/index.js';
+import { processCheckResult } from '../../src/monitoringWorkflow.js';
 
 describe('Integração: Regras de Negócio de Incidentes e Alertas', () => {
   let testMonitor;
@@ -40,7 +41,7 @@ describe('Integração: Regras de Negócio de Incidentes e Alertas', () => {
 
   it('deve registrar execução, abrir incidente e disparar alerta na primeira falha', async () => {
     // Espionamos o AlertService para saber se o sistema tentou avisar o cliente
-    const alertSpy = jest.spyOn(AlertService, 'sendMockEmail');
+    const alertSpy = jest.spyOn(alertService, 'sendMockEmail');
 
     // Forjamos um retorno catastrófico do PingService
     const mockPingFalha = {
@@ -51,7 +52,7 @@ describe('Integração: Regras de Negócio de Incidentes e Alertas', () => {
     };
 
     // Acionamos o cérebro do sistema diretamente
-    const result = await IncidentService.handleStatus(testMonitor.id, mockPingFalha);
+    const result = await processCheckResult(testMonitor.id, mockPingFalha);
 
     // Validações de Transição de Estado
     expect(result.stateChanged).toBe(true);
@@ -72,7 +73,8 @@ describe('Integração: Regras de Negócio de Incidentes e Alertas', () => {
       testMonitor.id,
       result.incident.id,
       'FALHA',
-      'HTTP Error 500'
+      'HTTP Error 500',
+      findAlertRecipient
     );
 
     alertSpy.mockRestore(); // Limpa o espião para o próximo teste
@@ -81,7 +83,7 @@ describe('Integração: Regras de Negócio de Incidentes e Alertas', () => {
   // --- BLOCO 2: O CAOS CONTINUA ---
 
   it('NÃO deve gerar novo alerta ou duplicar incidentes se o monitor continuar caindo', async () => {
-    const alertSpy = jest.spyOn(AlertService, 'sendMockEmail');
+    const alertSpy = jest.spyOn(alertService, 'sendMockEmail');
 
     // Forjamos uma nova falha, desta vez por Timeout
     const mockPingFalhaContinua = {
@@ -91,7 +93,7 @@ describe('Integração: Regras de Negócio de Incidentes e Alertas', () => {
       errorLog: 'Timeout (10000ms)',
     };
 
-    const result = await IncidentService.handleStatus(testMonitor.id, mockPingFalhaContinua);
+    const result = await processCheckResult(testMonitor.id, mockPingFalhaContinua);
 
     // O estado NÃO deve mudar, o incidente já estava aberto
     expect(result.stateChanged).toBe(false);
@@ -109,7 +111,7 @@ describe('Integração: Regras de Negócio de Incidentes e Alertas', () => {
   // --- BLOCO 3: A RECUPERAÇÃO ---
 
   it('deve resolver o incidente e gerar alerta de recuperação quando o site voltar', async () => {
-    const alertSpy = jest.spyOn(AlertService, 'sendMockEmail');
+    const alertSpy = jest.spyOn(alertService, 'sendMockEmail');
 
     // O herói da infraestrutura resolveu o problema (200 OK)
     const mockPingSucesso = {
@@ -119,7 +121,7 @@ describe('Integração: Regras de Negócio de Incidentes e Alertas', () => {
       errorLog: null,
     };
 
-    const result = await IncidentService.handleStatus(testMonitor.id, mockPingSucesso);
+    const result = await processCheckResult(testMonitor.id, mockPingSucesso);
 
     expect(result.stateChanged).toBe(true);
     expect(result.incident.status).toBe('RESOLVED');
@@ -132,7 +134,13 @@ describe('Integração: Regras de Negócio de Incidentes e Alertas', () => {
     });
 
     expect(alerts.length).toBe(2); // 1 de falha original, 1 de recuperação agora
-    expect(alertSpy).toHaveBeenCalledWith(testMonitor.id, result.incident.id, 'RECUPERACAO', null);
+    expect(alertSpy).toHaveBeenCalledWith(
+      testMonitor.id,
+      result.incident.id,
+      'RECUPERACAO',
+      null,
+      findAlertRecipient
+    );
 
     alertSpy.mockRestore();
   });

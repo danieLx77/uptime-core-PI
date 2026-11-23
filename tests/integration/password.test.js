@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import request from 'supertest';
 import app from '../../src/app.js';
 import prisma from '../../src/config/database.js';
-import mailer from '../../src/config/mail.js';
+import mailer from '../../src/modules/identity/mail.js';
 
 describe('Integração: Recuperação de Senha', () => {
   let testUser;

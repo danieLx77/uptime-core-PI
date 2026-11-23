@@ -1,7 +1,7 @@
 import { Router } from 'express';
-import PasswordController from '../controllers/PasswordController.js';
-import SessionController from '../controllers/SessionController.js';
-import UserController from '../controllers/UserController.js';
+import PasswordController from './PasswordController.js';
+import SessionController from './SessionController.js';
+import UserController from './UserController.js';
 
 const routes = new Router();
 

@@ -1,4 +1,4 @@
-import prisma from '../config/database.js';
+import prisma from './persistence.js';
 
 class AdminCheckExecutionController {
   async index(req, res) {

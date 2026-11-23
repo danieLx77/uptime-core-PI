@@ -49,8 +49,9 @@ jobs:
       - name: Instalar dependências
         run: npm ci
 
-      - name: Gerar Prisma Client e Swagger
+      - name: Validar schema e gerar Prisma Client e Swagger
         run: |
+          npm exec -- prisma validate
           npm exec -- prisma generate
           npm run swagger
           test -s src/config/swagger-output.json
@@ -58,9 +59,25 @@ jobs:
       - name: Executar lint
         run: npm run lint
 
+      - name: Verificar fronteiras arquiteturais
+        run: npm run test:architecture
+
       - name: Aplicar migrations e executar testes com cobertura
         env:
           DATABASE_URL: postgresql://uptime_test:uptime_test@127.0.0.1:${{ job.services.postgres.ports[5432] }}/uptime_ci_test?schema=public
         run: |
           npm run db:migrate
           npm test -- --coverage
+
+      - name: Verificar inicialização da API e do scheduler
+        env:
+          DATABASE_URL: postgresql://uptime_test:uptime_test@127.0.0.1:${{ job.services.postgres.ports[5432] }}/uptime_ci_test?schema=public
+          PORT: '3199'
+        run: |
+          log="$(mktemp)"
+          node src/server.js >"$log" 2>&1 &
+          api_pid=$!
+          trap 'result=$?; kill "$api_pid" 2>/dev/null || true; wait "$api_pid" 2>/dev/null || true; cat "$log"; rm -f "$log"; exit "$result"' EXIT
+          curl --fail --silent --show-error --retry 5 --retry-connrefused --max-time 5 "http://127.0.0.1:$PORT/api/health"
+          curl --fail --silent --show-error --max-time 5 "http://127.0.0.1:$PORT/api/docs/" > /dev/null
+          grep -F 'Scheduler de Monitoramento iniciado.' "$log"

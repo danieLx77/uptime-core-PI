@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
-import prisma from '../config/database.js';
-import mailer from '../config/mail.js';
+import prisma from './persistence.js';
+import mailer from './mail.js';
 
 class PasswordController {
   // 1. Solicita a recuperação (Gera token e envia e-mail)
