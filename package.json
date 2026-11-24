@@ -6,7 +6,7 @@
   "scripts": {
     "start": "npm run start -w @uptime/gateway",
     "lint": "eslint services/*/src gateway/src",
-    "lint:fix": "eslint src/ --fix",
+    "lint:fix": "npm run lint -- --fix",
     "db:migrate": "npm run db:migrate --workspaces --if-present",
     "prepare": "husky",
     "test": "cross-env NODE_OPTIONS=--experimental-vm-modules dotenv -e .env.test -- jest --runInBand --forceExit",
@@ -24,6 +24,8 @@
   },
   "devDependencies": {
     "acorn": "^8.16.0",
+    "ajv": "8.18.0",
+    "ajv-formats": "3.0.1",
     "cross-env": "^10.1.0",
     "dotenv": "^17.4.2",
     "dotenv-cli": "^11.0.0",

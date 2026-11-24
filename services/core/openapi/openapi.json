@@ -1369,7 +1369,11 @@
           "timestamp": {
             "type": "string"
           }
-        }
+        },
+        "required": [
+          "status",
+          "timestamp"
+        ]
       },
       "User": {
         "type": "object",
@@ -1400,7 +1404,13 @@
             "type": "string",
             "format": "date-time"
           }
-        }
+        },
+        "required": [
+          "id",
+          "name",
+          "email",
+          "role"
+        ]
       },
       "UserList": {
         "type": "array",
@@ -1451,15 +1461,22 @@
             "$ref": "#/components/schemas/User"
           },
           "token": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1
           }
-        }
+        },
+        "required": [
+          "user",
+          "token"
+        ]
       },
       "Email": {
         "type": "object",
         "properties": {
           "email": {
-            "type": "string"
+            "type": "string",
+            "format": "email",
+            "pattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$"
           }
         },
         "required": [
@@ -1589,7 +1606,17 @@
               }
             }
           }
-        }
+        },
+        "required": [
+          "id",
+          "userId",
+          "name",
+          "url",
+          "interval_minutes",
+          "status",
+          "createdAt",
+          "updatedAt"
+        ]
       },
       "MonitorList": {
         "type": "array",
@@ -1604,7 +1631,10 @@
             "type": "array",
             "items": {
               "type": "string",
-              "example": "8b76da0a-927f-4a91-ba67-6cf05a05c23f"
+              "example": "8b76da0a-927f-4a91-ba67-6cf05a05c23f",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "\\S"
             },
             "maxItems": 500
           }
@@ -1620,7 +1650,10 @@
           "properties": {
             "id": {
               "type": "string",
-              "example": "8b76da0a-927f-4a91-ba67-6cf05a05c23f"
+              "example": "8b76da0a-927f-4a91-ba67-6cf05a05c23f",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "\\S"
             },
             "name": {
               "type": "string"
@@ -1639,9 +1672,19 @@
             },
             "userId": {
               "type": "string",
-              "example": "8b76da0a-927f-4a91-ba67-6cf05a05c23f"
+              "example": "8b76da0a-927f-4a91-ba67-6cf05a05c23f",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "\\S"
             }
-          }
+          },
+          "required": [
+            "id",
+            "name",
+            "url",
+            "status",
+            "userId"
+          ]
         }
       },
       "Execution": {
@@ -1696,7 +1739,14 @@
               }
             }
           }
-        }
+        },
+        "required": [
+          "id",
+          "monitorId",
+          "status_code",
+          "response_time_ms",
+          "timestamp"
+        ]
       },
       "ExecutionList": {
         "type": "array",
@@ -1719,9 +1769,17 @@
               "monitors": {
                 "type": "integer"
               }
-            }
+            },
+            "required": [
+              "users",
+              "monitors"
+            ]
           }
-        }
+        },
+        "required": [
+          "system",
+          "metrics"
+        ]
       },
       "Presentation": {
         "type": "object",
@@ -1747,7 +1805,15 @@
               "type": "string"
             }
           }
-        }
+        },
+        "required": [
+          "status",
+          "name",
+          "version",
+          "description",
+          "documentation",
+          "endpoints"
+        ]
       },
       "Error": {
         "type": "object",
@@ -1761,7 +1827,19 @@
           "message": {
             "type": "string"
           }
-        }
+        },
+        "anyOf": [
+          {
+            "required": [
+              "error"
+            ]
+          },
+          {
+            "required": [
+              "message"
+            ]
+          }
+        ]
       },
       "Message": {
         "type": "object",
@@ -1769,7 +1847,10 @@
           "message": {
             "type": "string"
           }
-        }
+        },
+        "required": [
+          "message"
+        ]
       }
     },
     "securitySchemes": {

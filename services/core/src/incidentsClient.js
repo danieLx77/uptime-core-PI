@@ -13,9 +13,21 @@ export async function sendCheckResult(result) {
     await response.body?.cancel();
     throw new Error(`Incidentes respondeu com HTTP ${response.status}.`);
   }
-  const resultBody = await response.json();
-  if (typeof resultBody?.stateChanged !== 'boolean') {
+  if (
+    response.status !== 200 ||
+    !/^application\/json\b/i.test(response.headers.get('content-type'))
+  ) {
+    await response.body?.cancel();
     throw new Error('Resposta inválida de Incidentes.');
   }
-  return resultBody;
+  const transition = await response.json().catch(() => null);
+  const id = transition?.incidentId;
+  const validId = typeof id === 'string' && id.trim().length > 0 && id.length <= 80;
+  if (
+    typeof transition?.stateChanged !== 'boolean' ||
+    (!validId && (id !== null || transition.stateChanged))
+  ) {
+    throw new Error('Resposta inválida de Incidentes.');
+  }
+  return transition;
 }

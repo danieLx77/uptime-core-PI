@@ -6,6 +6,10 @@ import mailer from './mail.js';
 const recoveryMessage = 'Se o e-mail existir, um link de recuperação será enviado.';
 const expiredMessage = 'Token expirado. Solicite uma nova recuperação.';
 
+function validEmail(email) {
+  return typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
 function digestToken(token) {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
@@ -13,7 +17,8 @@ function digestToken(token) {
 class PasswordController {
   async forgotPassword(req, res) {
     try {
-      const { email } = req.body;
+      const { email } = req.body ?? {};
+      if (!validEmail(email)) return res.status(400).json({ error: 'E-mail inválido.' });
       const user = await prisma.user.findUnique({ where: { email } });
 
       if (user) {
@@ -52,9 +57,9 @@ class PasswordController {
 
   async resetPassword(req, res) {
     try {
-      const { email, token, newPassword } = req.body;
+      const { email, token, newPassword } = req.body ?? {};
 
-      if (!email || !token || !newPassword) {
+      if (typeof email !== 'string' || !email || !token || !newPassword) {
         return res.status(400).json({ error: 'E-mail, token e nova senha são obrigatórios.' });
       }
       if (typeof token !== 'string') {

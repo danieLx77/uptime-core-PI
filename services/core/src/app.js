@@ -72,7 +72,7 @@ app.post('/internal/monitors/query', requireService, async (req, res) => {
   if (
     !Array.isArray(ids) ||
     ids.length > 500 ||
-    ids.some((id) => typeof id !== 'string' || !id || id.length > 80)
+    ids.some((id) => typeof id !== 'string' || !id.trim() || id.length > 80)
   ) {
     return res.status(400).json({ error: 'Informe até 500 identificadores de monitor.' });
   }

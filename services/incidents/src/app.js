@@ -14,7 +14,7 @@ app.get('/api/openapi.json', (_req, res) => res.json(spec));
 app.use('/api/admin', authenticate, requireAdmin, incidentRoutes, notificationRoutes);
 
 function validId(id) {
-  return typeof id === 'string' && id.length > 0 && id.length <= 80;
+  return typeof id === 'string' && id.trim().length > 0 && id.length <= 80;
 }
 
 app.post('/internal/check-results', requireService, async (req, res) => {

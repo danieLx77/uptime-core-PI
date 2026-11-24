@@ -66,7 +66,21 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/IncidentList"
+                  "type": "array",
+                  "items": {
+                    "allOf": [
+                      {
+                        "$ref": "#/components/schemas/Incident"
+                      },
+                      {
+                        "type": "object",
+                        "required": [
+                          "monitor",
+                          "alerts"
+                        ]
+                      }
+                    ]
+                  }
                 }
               }
             }
@@ -254,7 +268,18 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Incident"
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Incident"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "monitor",
+                        "alerts"
+                      ]
+                    }
+                  ]
                 }
               }
             }
@@ -816,7 +841,10 @@
               "ok"
             ]
           }
-        }
+        },
+        "required": [
+          "status"
+        ]
       },
       "Incident": {
         "type": "object",
@@ -910,7 +938,15 @@
               }
             }
           }
-        }
+        },
+        "required": [
+          "id",
+          "monitorId",
+          "status",
+          "errorLog",
+          "startedAt",
+          "resolvedAt"
+        ]
       },
       "IncidentList": {
         "type": "array",
@@ -1008,7 +1044,17 @@
             },
             "nullable": true
           }
-        }
+        },
+        "required": [
+          "id",
+          "monitorId",
+          "incidentId",
+          "type",
+          "message",
+          "sentAt",
+          "monitor",
+          "incident"
+        ]
       },
       "AlertList": {
         "type": "array",
@@ -1021,7 +1067,10 @@
         "properties": {
           "executionId": {
             "type": "string",
-            "example": "8b76da0a-927f-4a91-ba67-6cf05a05c23f"
+            "example": "8b76da0a-927f-4a91-ba67-6cf05a05c23f",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "\\S"
           },
           "checkedAt": {
             "type": "string",
@@ -1029,7 +1078,10 @@
           },
           "monitorId": {
             "type": "string",
-            "example": "8b76da0a-927f-4a91-ba67-6cf05a05c23f"
+            "example": "8b76da0a-927f-4a91-ba67-6cf05a05c23f",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "\\S"
           },
           "success": {
             "type": "boolean"
@@ -1083,12 +1135,43 @@
           "incidentId": {
             "type": "string",
             "example": "8b76da0a-927f-4a91-ba67-6cf05a05c23f",
-            "nullable": true
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "\\S"
           }
         },
         "required": [
           "stateChanged",
           "incidentId"
+        ],
+        "description": "Quando o estado mudou, incidentId é obrigatório e não nulo. Sem transição, pode identificar um incidente já aberto ou ser nulo.",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "stateChanged": {
+                "type": "boolean",
+                "enum": [
+                  true
+                ]
+              },
+              "incidentId": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "properties": {
+              "stateChanged": {
+                "type": "boolean",
+                "enum": [
+                  false
+                ]
+              }
+            }
+          }
         ]
       },
       "Error": {
@@ -1103,7 +1186,19 @@
           "message": {
             "type": "string"
           }
-        }
+        },
+        "anyOf": [
+          {
+            "required": [
+              "error"
+            ]
+          },
+          {
+            "required": [
+              "message"
+            ]
+          }
+        ]
       },
       "Message": {
         "type": "object",
@@ -1111,7 +1206,10 @@
           "message": {
             "type": "string"
           }
-        }
+        },
+        "required": [
+          "message"
+        ]
       }
     },
     "securitySchemes": {
