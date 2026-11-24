@@ -1,0 +1,13 @@
+{
+  "name": "@uptime/gateway",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "swagger-ui-express": "^5.0.1"
+  }
+}

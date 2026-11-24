@@ -1,0 +1,6 @@
+# Use somente com um projeto Compose separado e bancos descartáveis.
+services:
+  core-db:
+    ports: ["127.0.0.1:${CORE_TEST_PORT:-55431}:5432"]
+  incidents-db:
+    ports: ["127.0.0.1:${INCIDENTS_TEST_PORT:-55432}:5432"]

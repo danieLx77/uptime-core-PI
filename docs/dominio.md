@@ -23,11 +23,11 @@ Uma execução é um fato pontual. Um incidente representa um período de indisp
 - Cada resultado é gravado antes da avaliação do incidente. A primeira falha sem incidente aberto inicia uma ocorrência; a falha seguinte mantém a ocorrência aberta. A recuperação resolve a ocorrência aberta. Checagem bem-sucedida sem incidente aberto só registra a execução.
 - A abertura e a recuperação automáticas geram alerta. A resolução e a reabertura administrativas preservam seu comportamento direto. A mensagem operacional é registrada e exibida no console.
 - O dono pode gerenciar seus monitores. Administradores têm as permissões previstas nas rotas e nos controllers. O histórico operacional exige autenticação e role de administrador.
-- A supressão de duplicidade vale para o processamento serial. A base conserva a consulta seguida de gravação e carece de uma restrição de unicidade para abertura concorrente. A regra de intervalo também conserva a virada de hora e os limites existentes.
+- Há no máximo um incidente aberto por monitor. O banco de Incidentes garante a invariante e só a transição vencedora produz um alerta novo. O cron pula um tick enquanto o anterior ainda está em execução na mesma instância. A regra de intervalo também conserva a virada de hora e os limites existentes.
 
 ## Event Storming preliminar
 
-Modelagem técnica derivada da implementação e dos testes. Os eventos abaixo representam fatos do domínio para discussão. A implementação usa chamadas internas e operações de banco.
+Modelagem técnica derivada da implementação e dos testes. Os eventos abaixo representam fatos do domínio para discussão. A implementação usa HTTP interno síncrono entre serviços e operações locais de banco.
 
 | Ator ou política | Comando | Fato conceitual | Regra ou reação | Contexto |
 |---|---|---|---|---|
@@ -40,3 +40,5 @@ Modelagem técnica derivada da implementação e dos testes. Os eventos abaixo r
 | Usuário | Solicitar recuperação | Token de recuperação gerado | Persiste token temporário e aciona SMTP | Identidade e acesso |
 
 Os cenários e o encadeamento técnico estão no [fluxo de monitoramento](services.md).
+
+Núcleo possui usuários, monitores e execuções. Incidentes possui incidentes e alertas e referencia monitores por ID. Um destino recusado pela política não gera incidente de indisponibilidade. A ordem de chegada do resultado ainda é relevante e a entrega de uma execução salva pode falhar.

@@ -1,64 +1,104 @@
-version: '3.8'
-
 services:
-  # Nosso banco de dados
-  postgres_db:
-    image: postgres:15-alpine
-    container_name: uptime_postgres
-    restart: always
-    environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: admin123
-      POSTGRES_DB: api_monitor_db
+  gateway:
+    build:
+      context: .
+      dockerfile: gateway/Dockerfile
     ports:
-      - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    # Verifica de tempos em tempos se o banco está pronto
+      - "${GATEWAY_PORT:-3000}:3000"
+    environment:
+      CORE_URL: http://core:3001
+      INCIDENTS_URL: http://incidents:3002
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+    networks: [edge]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d api_monitor_db"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/gateway/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 2s
+      retries: 12
 
-  # A nossa API
-  api:
-    build: .
-    container_name: uptime_api
-    restart: always
-    ports:
-      - "3000:3000"
+  core:
+    build:
+      context: .
+      dockerfile: services/core/Dockerfile
+    command: [sh, -c, "npm run db:migrate -w @uptime/core && exec node services/core/src/server.js"]
     environment:
-      DATABASE_URL: "postgresql://admin:admin123@postgres_db:5432/api_monitor_db?schema=public"
-    volumes:
-      - .:/usr/src/app
-      - /usr/src/app/node_modules
-    # Só deixa a API subir quando o healthcheck do banco der "OK"
+      PORT: 3001
+      CORE_DATABASE_URL: postgresql://${CORE_DB_USER:-uptime_core}:${CORE_DB_PASSWORD:-uptime_core_local}@core-db:5432/uptime_core
+      INCIDENTS_URL: http://incidents:3002
+      JWT_SECRET: ${JWT_SECRET:?Defina JWT_SECRET no .env}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:?Defina INTERNAL_SERVICE_TOKEN no .env}
+      MAIL_HOST: ${MAIL_HOST:-}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USER: ${MAIL_USER:-}
+      MAIL_PASS: ${MAIL_PASS:-}
     depends_on:
-      postgres_db:
+      core-db:
         condition: service_healthy
-    # Sobrescreve o comando padrão para rodar as migrações ANTES de ligar o servidor
-    command: sh -c "npx prisma generate && npx prisma migrate deploy && npm run dev"
-
-  # Contêiner isolado para os testes
-  postgres_test:
-    image: postgres:15-alpine
-    container_name: uptime_postgres_test
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: admin
-      POSTGRES_DB: api_monitor_test_db
-    ports:
-      - "5433:5432"
-    volumes:
-      - pg_test_data:/var/lib/postgresql/data
+    networks: [edge, core-data]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U admin -d api_monitor_test_db"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3001/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+
+  incidents:
+    build:
+      context: .
+      dockerfile: services/incidents/Dockerfile
+    command: [sh, -c, "npm run db:migrate -w @uptime/incidents && exec node services/incidents/src/server.js"]
+    environment:
+      PORT: 3002
+      INCIDENTS_DATABASE_URL: postgresql://${INCIDENTS_DB_USER:-uptime_incidents}:${INCIDENTS_DB_PASSWORD:-uptime_incidents_local}@incidents-db:5432/uptime_incidents
+      CORE_URL: http://core:3001
+      JWT_SECRET: ${JWT_SECRET:?Defina JWT_SECRET no .env}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:?Defina INTERNAL_SERVICE_TOKEN no .env}
+    depends_on:
+      incidents-db:
+        condition: service_healthy
+    networks: [edge, incidents-data]
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3002/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+
+  core-db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: uptime_core
+      POSTGRES_USER: ${CORE_DB_USER:-uptime_core}
+      POSTGRES_PASSWORD: ${CORE_DB_PASSWORD:-uptime_core_local}
+    volumes:
+      - core-data:/var/lib/postgresql/data
+    networks: [core-data]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -h 127.0.0.1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 3s
+      timeout: 2s
+      retries: 15
+
+  incidents-db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: uptime_incidents
+      POSTGRES_USER: ${INCIDENTS_DB_USER:-uptime_incidents}
+      POSTGRES_PASSWORD: ${INCIDENTS_DB_PASSWORD:-uptime_incidents_local}
+    volumes:
+      - incidents-data:/var/lib/postgresql/data
+    networks: [incidents-data]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -h 127.0.0.1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 3s
+      timeout: 2s
+      retries: 15
+
+networks:
+  edge:
+  core-data:
+    internal: true
+  incidents-data:
+    internal: true
 
 volumes:
-  pgdata:
-  pg_test_data:
+  core-data:
+  incidents-data:

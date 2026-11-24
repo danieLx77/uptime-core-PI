@@ -1,0 +1,1228 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Uptime Core PI · Incidentes",
+    "version": "3.0.0",
+    "description": "Contrato do serviço Incidentes. O Gateway encaminha operações públicas. Operações internas usam a origem do serviço."
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Gateway para operações públicas"
+    }
+  ],
+  "paths": {
+    "/api/health": {
+      "get": {
+        "summary": "Consultar a disponibilidade HTTP do serviço",
+        "tags": [
+          "API pública"
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Operação concluída",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Erro interno",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "servers": [
+          {
+            "url": "http://incidents:3002",
+            "description": "Rede interna"
+          }
+        ]
+      }
+    },
+    "/api/admin/incidents": {
+      "get": {
+        "summary": "Listar incidentes",
+        "tags": [
+          "Administração"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operação concluída",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "allOf": [
+                      {
+                        "$ref": "#/components/schemas/Incident"
+                      },
+                      {
+                        "type": "object",
+                        "required": [
+                          "monitor",
+                          "alerts"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Entrada inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Credencial ausente ou inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Acesso negado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Serviço necessário indisponível",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Erro interno",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "description": "Requer JWT de administrador.",
+        "parameters": [
+          {
+            "name": "monitorId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "example": "8b76da0a-927f-4a91-ba67-6cf05a05c23f"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "OPEN",
+                "RESOLVED"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "/api/admin/alerts": {
+      "get": {
+        "summary": "Listar alertas",
+        "tags": [
+          "Administração"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operação concluída",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Credencial ausente ou inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Acesso negado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Serviço necessário indisponível",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Erro interno",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "description": "Requer JWT de administrador.",
+        "parameters": [
+          {
+            "name": "monitorId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "example": "8b76da0a-927f-4a91-ba67-6cf05a05c23f"
+            }
+          },
+          {
+            "name": "incidentId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "example": "8b76da0a-927f-4a91-ba67-6cf05a05c23f"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/admin/incidents/{id}": {
+      "get": {
+        "summary": "Consultar registro de incidents",
+        "tags": [
+          "Administração"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operação concluída",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Incident"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "monitor",
+                        "alerts"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Credencial ausente ou inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Acesso negado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Recurso não encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Serviço necessário indisponível",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Erro interno",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "description": "Requer JWT de administrador.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "8b76da0a-927f-4a91-ba67-6cf05a05c23f"
+            }
+          }
+        ]
+      },
+      "delete": {
+        "summary": "Excluir registro de incidents",
+        "tags": [
+          "Administração"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Recurso removido"
+          },
+          "401": {
+            "description": "Credencial ausente ou inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Acesso negado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Recurso não encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Erro interno",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "description": "Requer JWT de administrador.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "8b76da0a-927f-4a91-ba67-6cf05a05c23f"
+            }
+          }
+        ]
+      }
+    },
+    "/api/admin/alerts/{id}": {
+      "get": {
+        "summary": "Consultar registro de alerts",
+        "tags": [
+          "Administração"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operação concluída",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Alert"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Credencial ausente ou inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Acesso negado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Recurso não encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Serviço necessário indisponível",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Erro interno",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "description": "Requer JWT de administrador.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "8b76da0a-927f-4a91-ba67-6cf05a05c23f"
+            }
+          }
+        ]
+      },
+      "delete": {
+        "summary": "Excluir registro de alerts",
+        "tags": [
+          "Administração"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Recurso removido"
+          },
+          "401": {
+            "description": "Credencial ausente ou inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Acesso negado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Recurso não encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Erro interno",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "description": "Requer JWT de administrador.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "8b76da0a-927f-4a91-ba67-6cf05a05c23f"
+            }
+          }
+        ]
+      }
+    },
+    "/api/admin/incidents/{id}/resolve": {
+      "patch": {
+        "summary": "Resolver incidente",
+        "tags": [
+          "Administração"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operação concluída",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Incident"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Entrada inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Credencial ausente ou inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Acesso negado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Recurso não encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Erro interno",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "description": "Requer JWT de administrador.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "8b76da0a-927f-4a91-ba67-6cf05a05c23f"
+            }
+          }
+        ]
+      }
+    },
+    "/api/admin/incidents/{id}/reopen": {
+      "patch": {
+        "summary": "Reabrir incidente",
+        "tags": [
+          "Administração"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operação concluída",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Incident"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Entrada inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Credencial ausente ou inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Acesso negado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Recurso não encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflito de estado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Erro interno",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "description": "Requer JWT de administrador.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "8b76da0a-927f-4a91-ba67-6cf05a05c23f"
+            }
+          }
+        ]
+      }
+    },
+    "/internal/check-results": {
+      "post": {
+        "summary": "Avaliar resultado recebido do Núcleo",
+        "tags": [
+          "Interno"
+        ],
+        "security": [
+          {
+            "serviceToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operação concluída",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Transition"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Entrada inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Credencial ausente ou inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Erro interno",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-internal": true,
+        "description": "Operação interna entre serviços. O Gateway não a encaminha.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckResult"
+              }
+            }
+          }
+        },
+        "servers": [
+          {
+            "url": "http://incidents:3002",
+            "description": "Rede interna"
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Health": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok"
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "Incident": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "8b76da0a-927f-4a91-ba67-6cf05a05c23f"
+          },
+          "monitorId": {
+            "type": "string",
+            "example": "8b76da0a-927f-4a91-ba67-6cf05a05c23f"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "OPEN",
+              "RESOLVED"
+            ]
+          },
+          "errorLog": {
+            "type": "string",
+            "nullable": true
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "resolvedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "monitor": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "example": "8b76da0a-927f-4a91-ba67-6cf05a05c23f"
+              },
+              "name": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string",
+                "format": "uri",
+                "example": "https://example.com/health"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "ACTIVE",
+                  "PAUSED"
+                ]
+              },
+              "userId": {
+                "type": "string",
+                "example": "8b76da0a-927f-4a91-ba67-6cf05a05c23f"
+              }
+            },
+            "nullable": true
+          },
+          "alerts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "example": "8b76da0a-927f-4a91-ba67-6cf05a05c23f"
+                },
+                "monitorId": {
+                  "type": "string",
+                  "example": "8b76da0a-927f-4a91-ba67-6cf05a05c23f"
+                },
+                "incidentId": {
+                  "type": "string",
+                  "example": "8b76da0a-927f-4a91-ba67-6cf05a05c23f",
+                  "nullable": true
+                },
+                "type": {
+                  "type": "string",
+                  "example": "EMAIL"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "sentAt": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
+          }
+        },
+        "required": [
+          "id",
+          "monitorId",
+          "status",
+          "errorLog",
+          "startedAt",
+          "resolvedAt"
+        ]
+      },
+      "IncidentList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/Incident"
+        }
+      },
+      "Alert": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "8b76da0a-927f-4a91-ba67-6cf05a05c23f"
+          },
+          "monitorId": {
+            "type": "string",
+            "example": "8b76da0a-927f-4a91-ba67-6cf05a05c23f"
+          },
+          "incidentId": {
+            "type": "string",
+            "example": "8b76da0a-927f-4a91-ba67-6cf05a05c23f",
+            "nullable": true
+          },
+          "type": {
+            "type": "string",
+            "example": "EMAIL"
+          },
+          "message": {
+            "type": "string"
+          },
+          "sentAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "monitor": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "example": "8b76da0a-927f-4a91-ba67-6cf05a05c23f"
+              },
+              "name": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string",
+                "format": "uri",
+                "example": "https://example.com/health"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "ACTIVE",
+                  "PAUSED"
+                ]
+              },
+              "userId": {
+                "type": "string",
+                "example": "8b76da0a-927f-4a91-ba67-6cf05a05c23f"
+              }
+            },
+            "nullable": true
+          },
+          "incident": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "example": "8b76da0a-927f-4a91-ba67-6cf05a05c23f"
+              },
+              "monitorId": {
+                "type": "string",
+                "example": "8b76da0a-927f-4a91-ba67-6cf05a05c23f"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "OPEN",
+                  "RESOLVED"
+                ]
+              },
+              "errorLog": {
+                "type": "string",
+                "nullable": true
+              },
+              "startedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "resolvedAt": {
+                "type": "string",
+                "format": "date-time",
+                "nullable": true
+              }
+            },
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "monitorId",
+          "incidentId",
+          "type",
+          "message",
+          "sentAt",
+          "monitor",
+          "incident"
+        ]
+      },
+      "AlertList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/Alert"
+        }
+      },
+      "CheckResult": {
+        "type": "object",
+        "properties": {
+          "executionId": {
+            "type": "string",
+            "example": "8b76da0a-927f-4a91-ba67-6cf05a05c23f",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "\\S"
+          },
+          "checkedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "monitorId": {
+            "type": "string",
+            "example": "8b76da0a-927f-4a91-ba67-6cf05a05c23f",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "\\S"
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "statusCode": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 599,
+            "nullable": true
+          },
+          "errorLog": {
+            "type": "string",
+            "nullable": true
+          },
+          "monitor": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              },
+              "ownerName": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "url",
+              "ownerName"
+            ]
+          }
+        },
+        "required": [
+          "executionId",
+          "checkedAt",
+          "monitorId",
+          "success",
+          "statusCode",
+          "errorLog",
+          "monitor"
+        ]
+      },
+      "Transition": {
+        "type": "object",
+        "properties": {
+          "stateChanged": {
+            "type": "boolean"
+          },
+          "incidentId": {
+            "type": "string",
+            "example": "8b76da0a-927f-4a91-ba67-6cf05a05c23f",
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "\\S"
+          }
+        },
+        "required": [
+          "stateChanged",
+          "incidentId"
+        ],
+        "description": "Quando o estado mudou, incidentId é obrigatório e não nulo. Sem transição, pode identificar um incidente já aberto ou ser nulo.",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "stateChanged": {
+                "type": "boolean",
+                "enum": [
+                  true
+                ]
+              },
+              "incidentId": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "properties": {
+              "stateChanged": {
+                "type": "boolean",
+                "enum": [
+                  false
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "anyOf": [
+          {
+            "required": [
+              "error"
+            ]
+          },
+          {
+            "required": [
+              "message"
+            ]
+          }
+        ]
+      },
+      "Message": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ]
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      },
+      "serviceToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Service-Token"
+      }
+    }
+  }
+}

@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken';
 import request from 'supertest';
-import app from '../../src/app.js';
-import prisma from '../../src/config/database.js';
+import app from '../support/gateway.js';
+import prisma from '../support/database.js';
 
 describe('Integração: Administração de Incidentes Operacionais', () => {
   let adminToken;
@@ -180,7 +180,8 @@ describe('Integração: Administração de Incidentes Operacionais', () => {
     const tempIncident = await prisma.incident.create({
       data: {
         monitorId: monitor.id,
-        status: 'OPEN',
+        status: 'RESOLVED',
+        resolvedAt: new Date(),
         errorLog: 'Incidente temporário',
       },
     });

@@ -1,7 +1,7 @@
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
-import app from '../../src/app.js';
-import prisma from '../../src/config/database.js';
+import app from '../support/gateway.js';
+import prisma from '../support/database.js';
 
 describe('Integração: Rota Administrativa (Admin)', () => {
   let adminToken;

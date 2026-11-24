@@ -1,5 +1,5 @@
 import request from 'supertest';
-import app from '../../src/app.js'; // Ajuste o caminho se a sua pasta de testes for em outro nível
+import app from '../support/gateway.js'; // Ajuste o caminho se a sua pasta de testes for em outro nível
 
 describe('Testes de Integração do Servidor (app.js)', () => {
   it('deve retornar o objeto de apresentação da API na rota /api', async () => {

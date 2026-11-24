@@ -1,12 +1,33 @@
 import { jest } from '@jest/globals';
+import { createHash } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import request from 'supertest';
-import app from '../../src/app.js';
-import prisma from '../../src/config/database.js';
-import mailer from '../../src/modules/identity/mail.js';
+import app from '../support/gateway.js';
+import prisma, { core } from '../support/database.js';
+import { runOverlappingWrites } from '../support/concurrency.js';
+import mailer from '../../services/core/src/modules/identity/mail.js';
 
 describe('Integração: Recuperação de Senha', () => {
   let testUser;
+
+  function emailedToken() {
+    const message = mailer.sendMail.mock.calls.at(-1)[0];
+    return /<h3>([a-f0-9]{40})<\/h3>/.exec(message.html)[1];
+  }
+
+  async function issue() {
+    await request(app)
+      .post('/api/auth/forgot-password')
+      .send({ email: testUser.email })
+      .expect(200);
+    return emailedToken();
+  }
+
+  function reset(token, newPassword = 'nova_senha_segura') {
+    return request(app)
+      .post('/api/auth/reset-password')
+      .send({ email: testUser.email, token, newPassword });
+  }
 
   beforeAll(async () => {
     // 2. O espião agora vive dentro do ciclo de vida do Jest
@@ -46,7 +67,10 @@ describe('Integração: Recuperação de Senha', () => {
 
     // Validação de Banco: O token foi salvo no usuário?
     const updatedUser = await prisma.user.findUnique({ where: { email: 'esquecido@exemplo.com' } });
-    expect(updatedUser.passwordResetToken).not.toBeNull();
+    const token = emailedToken();
+    expect(updatedUser.passwordResetDigest).toBe(createHash('sha256').update(token).digest('hex'));
+    expect(updatedUser.passwordResetDigest).not.toBe(token);
+    expect(JSON.stringify(response.body)).not.toContain(token);
     expect(updatedUser.passwordResetExpires).not.toBeNull();
   });
 
@@ -80,27 +104,58 @@ describe('Integração: Recuperação de Senha', () => {
   });
 
   it('deve redefinir a senha com sucesso e limpar os tokens no banco', async () => {
-    // Busca o usuário atualizado para pegar o token real gerado no primeiro teste
-    const userWithToken = await prisma.user.findUnique({
-      where: { email: 'esquecido@exemplo.com' },
-    });
-
-    const response = await request(app).post('/api/auth/reset-password').send({
-      email: 'esquecido@exemplo.com',
-      token: userWithToken.passwordResetToken,
-      newPassword: 'nova_senha_segura',
-    });
+    const token = await issue();
+    const response = await reset(token);
 
     expect(response.status).toBe(200);
     expect(response.body.message).toBe('Senha atualizada com sucesso.');
 
     // Prova de limpeza: O banco não deve mais conter o token de uso único
     const finalUser = await prisma.user.findUnique({ where: { email: 'esquecido@exemplo.com' } });
-    expect(finalUser.passwordResetToken).toBeNull();
+    expect(finalUser.passwordResetDigest).toBeNull();
     expect(finalUser.passwordResetExpires).toBeNull();
 
     // Prova de criptografia: Validamos se a nova senha realmente funciona
     const passwordMatch = await bcrypt.compare('nova_senha_segura', finalUser.password_hash);
     expect(passwordMatch).toBe(true);
+    await reset(token).expect(400);
   });
+
+  it('rejeita um token expirado', async () => {
+    const token = await issue();
+    await prisma.user.update({
+      where: { id: testUser.id },
+      data: { passwordResetExpires: new Date(Date.now() - 1000) },
+    });
+    const response = await reset(token).expect(400);
+    expect(response.body.error).toBe('Token expirado. Solicite uma nova recuperação.');
+  });
+
+  it('invalida o token substituído por uma nova solicitação', async () => {
+    const first = await issue();
+    const second = await issue();
+    expect(second).not.toBe(first);
+    await reset(first).expect(400);
+    await reset(second).expect(200);
+  });
+
+  it('consome o mesmo token uma única vez sob concorrência real', async () => {
+    const token = await issue();
+    const passwords = ['senha-concorrente-1', 'senha-concorrente-2'];
+    const responses = await runOverlappingWrites(
+      core,
+      'users',
+      passwords.map((password) => () => reset(token, password).then((response) => response))
+    );
+    expect(responses.map((response) => response.status).sort()).toEqual([200, 400]);
+    const winner = responses.findIndex((response) => response.status === 200);
+    const user = await prisma.user.findUnique({ where: { id: testUser.id } });
+    expect(user.passwordResetDigest).toBeNull();
+    expect(await bcrypt.compare(passwords[winner], user.password_hash)).toBe(true);
+    expect(await bcrypt.compare(passwords[1 - winner], user.password_hash)).toBe(false);
+    await request(app)
+      .post('/api/auth/login')
+      .send({ email: testUser.email, password: passwords[winner] })
+      .expect(200);
+  }, 20000);
 });

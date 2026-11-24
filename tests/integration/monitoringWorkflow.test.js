@@ -4,18 +4,21 @@ import { jest } from '@jest/globals';
 import jwt from 'jsonwebtoken';
 import cron from 'node-cron';
 import request from 'supertest';
-import app from '../../src/app.js';
-import prisma from '../../src/config/database.js';
-import { startMonitoring } from '../../src/monitoringWorkflow.js';
+import app from '../support/gateway.js';
+import prisma from '../support/database.js';
+import { startMonitoring } from '../../services/core/src/monitoringWorkflow.js';
 
 describe('Fluxo integrado de monitoramento, incidentes e notificações', () => {
   let target;
   let targetUrl;
   let targetStatus = 200;
   let requestsToTarget = 0;
+  const originalTestOrigin = process.env.MONITORING_TEST_ORIGIN;
 
   beforeAll(async () => {
     // O scheduler consulta todo o banco de testes. A limpeza impede chamadas a alvos de outras suítes.
+    await prisma.alert.deleteMany();
+    await prisma.incident.deleteMany();
     await prisma.user.deleteMany();
 
     target = createServer((_req, res) => {
@@ -25,9 +28,12 @@ describe('Fluxo integrado de monitoramento, incidentes e notificações', () => 
     target.listen(0, '127.0.0.1');
     await once(target, 'listening');
     targetUrl = `http://127.0.0.1:${target.address().port}/health`;
+    process.env.MONITORING_TEST_ORIGIN = new URL(targetUrl).origin;
   });
 
   afterAll(async () => {
+    if (originalTestOrigin === undefined) delete process.env.MONITORING_TEST_ORIGIN;
+    else process.env.MONITORING_TEST_ORIGIN = originalTestOrigin;
     if (target?.listening) {
       await new Promise((resolve, reject) => {
         target.close((error) => (error ? reject(error) : resolve()));
@@ -77,12 +83,12 @@ describe('Fluxo integrado de monitoramento, incidentes e notificações', () => 
 
     await request(app).get('/api/admin/incidents').set('Authorization', userAuth).expect(403);
 
-    const schedule = jest.spyOn(cron, 'schedule').mockImplementation(() => undefined);
+    const schedule = jest.spyOn(cron, 'schedule').mockReturnValue({ on: jest.fn() });
     let scheduledTick;
     try {
       startMonitoring();
       expect(schedule).toHaveBeenCalledTimes(1);
-      expect(schedule).toHaveBeenCalledWith('* * * * *', expect.any(Function));
+      expect(schedule).toHaveBeenCalledWith('* * * * *', expect.any(Function), { noOverlap: true });
       [[, scheduledTick]] = schedule.mock.calls;
     } finally {
       schedule.mockRestore();

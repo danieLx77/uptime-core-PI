@@ -1,36 +1,15 @@
-# Serviços e fluxo de monitoramento
+# Serviços e comunicação
 
-O servidor inicia o [scheduler](../src/modules/monitoring/SchedulerService.js) após abrir a porta HTTP. A verificação usa o [PingService](../src/modules/monitoring/PingService.js). Após a requisição, o [fluxo de composição](../src/monitoringWorkflow.js) grava uma execução e chama Incidentes e Notificações por seus pontos públicos.
+O Núcleo registra `CheckExecution` antes de enviar `POST /internal/check-results` a Incidentes. O payload contém ID e instante da execução, monitor, resultado HTTP, erro e projeção mínima para formatar o alerta. A chamada usa o cabeçalho `X-Service-Token` com credencial de serviço. Incidentes retorna a transição e o ID do incidente.
 
-## Cenário principal
+Incidentes usa `POST /internal/monitors/query` com IDs em lotes de até 500 para completar o histórico administrativo. O Gateway não publica rotas `/internal`. A listagem conserva os filtros e retorna `monitor: null` quando o cadastro foi removido. Um erro ao consultar o Núcleo gera `503`.
 
-Com as migrations aplicadas, um usuário autenticado cadastra o monitor em `POST /api/monitors`. O scheduler usa os monitores ativos para os quais o minuto da hora é múltiplo do intervalo. Cada resultado persiste código HTTP e latência. Uma falha sem incidente aberto cria a ocorrência. Falhas sucessivas acumulam execuções e reutilizam o mesmo incidente. A recuperação resolve o incidente e grava outro alerta. Os endpoints administrativos permitem consultar as três trilhas de dados.
+As requisições entre serviços acontecem após transações locais. Um erro de transmissão não apaga a execução já gravada e não causa retentativa. Um erro ao registrar alerta não desfaz o incidente. Execuções duplicadas ou fora de ordem após recuperação podem produzir uma nova ocorrência, mesmo com unicidade de incidente aberto. O D4 deverá tratar entrega e deduplicação por ID de execução.
 
-```mermaid
-sequenceDiagram
-    participant M as Monitoramento
-    participant A as Alvo HTTP
-    participant F as Fluxo de composição
-    participant I as Incidentes
-    participant N as Notificações
-    M->>A: GET do alvo cadastrado
-    A-->>M: Resposta ou falha
-    M->>F: monitorId e resultado
-    F->>M: Persiste execução
-    F->>I: Aplica resultado ao estado da ocorrência
-    I-->>F: Incidente e indicação de transição
-    alt Abertura ou recuperação
-        F->>N: Registra alerta e fornece função de consulta
-        N->>M: Consulta destinatário via contrato fornecido
-        M-->>N: Dados para a mensagem
-        N->>N: Persiste alerta e registra entrega simulada
-    end
-```
+Contratos [Núcleo](../services/core/openapi/openapi.json) e [Incidentes](../services/incidents/openapi/openapi.json).
 
-A persistência da execução precede a avaliação das regras de transição. Se a primeira gravação falhar, o fluxo interrompe o processamento e registra o erro. A operação de alertas captura sua falha e preserva a transição já registrada. Esse comportamento é mantido durante o D2.
+### Limites do enriquecimento administrativo
 
-## Teste ponta a ponta
+Incidentes valida as projeções recebidas do Núcleo, inclusive os IDs solicitados e duplicados. Uma projeção ausente em resposta válida resulta em `monitor: null`. Uma resposta inválida produz `503`. O Núcleo também rejeita confirmações de Incidentes que não respeitem os campos e a nulabilidade da transição.
 
-[monitoringWorkflow.test.js](../tests/integration/monitoringWorkflow.test.js) usa cadastro e login pela API, PostgreSQL e um servidor de teste local. Ele inicia a composição do scheduler, confere o agendamento a cada minuto e aciona o callback registrado com minutos controlados. O alvo responde `200 → 503 → 503 → 200`. O teste confere a seleção pelo intervalo, quatro execuções, um incidente, dois alertas, recuperação e a rejeição da consulta administrativa para usuário comum.
-
-A suíte [incident.test.js](../tests/integration/incident.test.js) exercita o mesmo fluxo de persistência e alertas com resultados sintéticos, incluindo timeout sem código HTTP. Para execução, use o banco descartável conforme o [README](../README.md).
+Uma consulta de histórico pode exigir vários lotes sequenciais de até 500 IDs. O prazo de três segundos de cada lote pode se acumular e o prazo de oito segundos do Gateway pode se esgotar antes da consulta terminar. O D6 deve avaliar uma projeção de leitura, e o D7 deve avaliar um prazo global e a resiliência das chamadas.

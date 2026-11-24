@@ -1,92 +1,139 @@
-# Arquitetura do Uptime Core PI
+# Arquitetura do D3
 
-O Uptime Core PI roda em um único processo Node.js com Express, scheduler e Prisma. O PostgreSQL continua compartilhado fisicamente. O D2 organiza o código em contextos que expõem operações públicas e controlam os próprios acessos de escrita.
+O Uptime Core PI atende operadores que cadastram serviços HTTP e administradores que investigam indisponibilidades. O [ADR 0002](adr/0002-decomposicao-d3.md) registra a decomposição e o [ADR 0003](adr/0003-garantias-do-monitoramento.md) registra as proteções de domínio.
 
-## C4 · Contexto do sistema
-
-```mermaid
-flowchart TD
-    Account["Usuário ou administrador"] -->|Cadastra e consulta| System["Uptime Core PI"]
-    System -->|Verifica disponibilidade HTTP| Target["Serviço monitorado"]
-    System -->|Envia recuperação de senha| SMTP["Servidor SMTP"]
-```
-
-## C4 · Contêineres
+## C4 · Contexto e contêineres
 
 ```mermaid
 flowchart TD
-    Client["Cliente da API"] -->|HTTP e JWT| App["Aplicação Node.js com Express e scheduler"]
-    App -->|Prisma| DB[("PostgreSQL")]
-    App -->|HTTP| Target["Alvo monitorado"]
-    App -->|SMTP| Mail["Servidor de e-mail"]
+    Operator["Operador e administrador"] --> PI["Uptime Core PI"]
+    PI --> Target["Serviço HTTP monitorado"]
+    PI --> Mail["Servidor SMTP de recuperação"]
 ```
 
-O banco de testes do Compose serve à suíte. A aplicação usa um banco de execução.
+```mermaid
+flowchart TD
+    User["Cliente HTTP"] --> Gateway["Gateway · Express"]
+    Gateway --> Core["Núcleo · Express e cron"]
+    Gateway --> Incidents["Incidentes · Express"]
+    Core <-->|HTTP autenticado| Incidents
+    Core --> CoreDB[("PostgreSQL Núcleo")]
+    Incidents --> IncDB[("PostgreSQL Incidentes")]
+    Core --> Target["Alvo HTTP e SMTP"]
+```
 
 ## C4 · Componentes e mapa de contextos
 
 ```mermaid
 flowchart TD
-    HTTP["Composição HTTP em app e adminRoutes"] -->|Autenticação, autorização e rotas| Identity["Identidade e acesso"]
-    HTTP -->|CRUD e histórico de checagens| Monitoring["Monitoramento"]
-    HTTP -->|Operações administrativas| Incidents["Incidentes"]
-    HTTP -->|Histórico administrativo| Notifications["Notificações"]
-    Flow["Composição do ciclo em monitoringWorkflow"] -->|Registra execução e lê destinatário| Monitoring
-    Flow -->|Interpreta resultado| Incidents
-    Flow -->|Registra alerta de transição| Notifications
-    Monitoring -. "Scheduler entrega resultado ao callback" .-> Flow
+    subgraph Core["Núcleo"]
+      Identity["Identidade e acesso"]
+      Monitoring["Monitoramento"]
+      CoreFlow["Composição HTTP e scheduler"]
+      CoreFlow --> Identity
+      CoreFlow --> Monitoring
+    end
+    subgraph Ops["Incidentes"]
+      Intake["Composição HTTP e ingestão"]
+      Lifecycle["Incidentes"]
+      Notifications["Notificações"]
+      Intake --> Lifecycle
+      Intake --> Notifications
+    end
+    CoreFlow -->|Resultado persistido| Intake
+    Intake -->|Projeção em lote| CoreFlow
 ```
 
-As setas contínuas mostram as chamadas feitas pela composição. A seta pontilhada é a invocação do callback configurado na inicialização. Os contextos ficam em `src/modules/`. Os imports entre eles são proibidos, inclusive para pontos públicos. A composição acessa apenas os `index.js`. Os quatro módulos são componentes internos da aplicação.
-
-| Contexto | Responsabilidade e dados próprios | Contratos públicos e consumidores |
+| Contexto | Serviço e dados | Fronteira |
 |---|---|---|
-| [Identidade e acesso](../src/modules/identity/index.js) | Cria, consulta, atualiza e exclui `User`. Gerencia credenciais, sessão, recuperação via SMTP e autorização administrativa | `authRoutes`, `userRoutes`, `authenticate`, `requireAdmin` e `countUsers()` para composição HTTP |
-| [Monitoramento](../src/modules/monitoring/index.js) | Controla `Monitor` e `CheckExecution`, cadastro, agenda, requisição HTTP e registro da execução | Rotas de monitores e de execuções, `countMonitors()`, `scheduler`, `saveExecution(monitorId, result)` e `findAlertRecipient(monitorId)` |
-| [Incidentes](../src/modules/incidents/index.js) | Cria, resolve, reabre, consulta e exclui `Incident`. Aplica transições automáticas a partir do resultado da checagem | Rotas administrativas e `incidentService.handleStatus(monitorId, result)`, que informa a transição e o incidente |
-| [Notificações](../src/modules/notifications/index.js) | Cria, consulta e exclui `Alert`. Decide o conteúdo conforme a transição recebida e registra o alerta simulado | Rotas administrativas e `alertService.sendMockEmail(monitorId, incidentId, status, reason, findRecipient)`. A composição fornece a função de leitura do destinatário |
+| Identidade e acesso | Núcleo, `User` | Usuários, JWT, autorização e recuperação via SMTP |
+| Monitoramento | Núcleo, `Monitor` e `CheckExecution` | Cadastro, política de destinos, scheduler, execução e consulta local |
+| Incidentes | Incidentes, `Incident` | Ingestão autenticada, transições automáticas, operações administrativas e histórico |
+| Notificações | Incidentes, `Alert` | Registro de alerta simulado e consulta por monitor ou incidente |
 
-### Propriedade e exceções de leitura
+O Núcleo preserva as cascatas entre usuários, monitores e execuções. Incidentes preserva a FK de alertas para incidentes dentro do próprio PostgreSQL, com `SET NULL` na exclusão. `monitorId` é uma referência externa, sem FK. Ao excluir o cadastro, o Núcleo remove suas execuções e a outra unidade mantém o histórico operacional. Respostas enriquecidas usam `monitor: null` para registros cujo cadastro deixou de existir. Consultas combinadas deduplicam IDs e consultam o Núcleo em lotes de 500. O Gateway só encaminha, sem cliente Prisma.
 
-Cada `persistence.js` disponibiliza ao respectivo módulo somente os delegates Prisma dos modelos da tabela acima. Os handlers HTTP chamam suas operações de persistência locais. Os testes de integração usam o cliente compartilhado para montar e verificar fixtures.
+O guard verifica imports estáticos, ciclos por proibição de imports entre contextos, acesso à persistência, reexports e imports entre unidades. O ponto de configuração Prisma de cada serviço é o único consumidor do cliente gerado daquele serviço. A configuração do banco não é um contrato público. A checagem estática cobre JavaScript em produção e mantém imports dinâmicos e comportamento em runtime fora de seu alcance.
 
-As consultas administrativas preservam os relacionamentos projetados pelo contrato HTTP. Incidentes lê monitores e alertas pelo Prisma. Notificações lê monitores e incidentes. Monitoramento lê nome e e-mail do dono para detalhar um monitor e preparar o destinatário de um alerta. A leitura do destinatário permanece em uma consulta relacional. O módulo de Notificações recebe essa capacidade por parâmetro. A recuperação de acesso continua em Identidade e é o único fluxo que usa SMTP.
+## Sequências HTTP
 
-As chaves estrangeiras e o comportamento de cascata permanecem no schema. A exclusão de usuário ou monitor pode remover registros descendentes, e a exclusão de incidente zera a referência nos alertas quando aplicável. São efeitos do banco já previstos no [schema Prisma](../prisma/schema.prisma). Na extração será necessário decidir a retenção do histórico e substituir joins e cascatas entre serviços.
+```mermaid
+sequenceDiagram
+    participant O as Operador
+    participant G as Gateway
+    participant N as Núcleo
+    participant D as Banco do Núcleo
+    O->>G: Login
+    G->>N: Encaminha credenciais
+    N->>D: Lê identidade e verifica senha
+    N-->>O: JWT via Gateway
+    O->>G: Cadastro de monitor com JWT
+    G->>N: Encaminha JSON e JWT
+    N->>D: Valida URL e grava monitor do dono
+    N-->>O: 201 via Gateway
+```
 
-## Comunicação e proteção de fronteiras
+```mermaid
+sequenceDiagram
+    participant T as Alvo HTTP
+    participant N as Núcleo
+    participant D as Banco do Núcleo
+    participant I as Incidentes
+    participant B as Banco de Incidentes
+    N->>T: Checagem com destino validado
+    T-->>N: Resposta ou falha de transporte
+    N->>D: Grava CheckExecution
+    N->>I: POST /internal/check-results
+    alt Abertura ou recuperação efetiva
+        I->>B: Transição condicionada e alerta
+        I-->>N: Transição e identificador
+    else Queda repetida sem transição
+        I-->>N: Estado sem mudança
+    else Falha HTTP ou timeout
+        Note over N,D: Execução local permanece registrada
+    end
+```
 
-[monitoringWorkflow.js](../src/monitoringWorkflow.js) coordena chamadas síncronas aguardadas no mesmo processo. Monitoramento grava uma execução, Incidentes determina a transição e Notificações registra alerta quando o estado muda. As escritas continuam em operações separadas. Falha ao persistir uma execução interrompe o processamento do resultado. Falha no alerta deixa a transição de incidente registrada.
+```mermaid
+sequenceDiagram
+    participant A as Administrador
+    participant G as Gateway
+    participant I as Incidentes
+    participant B as Banco de Incidentes
+    participant N as Núcleo
+    A->>G: Consulta com JWT
+    G->>I: Encaminha método e filtro
+    I->>B: Lê ocorrências e alertas
+    I->>N: Projeções dos monitores em lote
+    N-->>I: Resumos disponíveis
+    I-->>A: Histórico via Gateway
+```
 
-`npm run test:architecture` analisa imports e reexports estáticos com o parser Acorn em `scripts/architecture/check.mjs`. A configuração do banco é o único arquivo de produção autorizado a importar os pacotes de cliente e adaptador do Prisma. Apenas os módulos de persistência podem importar o cliente compartilhado. Os pontos públicos declaram exports nomeados e o guard rejeita reexports com `*`, inclusive namespaces. A integração passa pelos três arquivos de composição declarados. A regra impede ciclos estáticos entre contextos. Os sete testes do guard incluem imports privados, dependências em ambas as direções, imports do Prisma e reexports irrestritos. A CI executa o comando no mesmo job do lint e da integração.
+## Contratos, segurança e consistência
 
-O analisador cobre ESM estático em `src/**/*.js`. Imports dinâmicos, chamadas em runtime, módulos fora de `src` e acesso relacional dentro de delegates Prisma ficam fora da inspeção. Preserve a propriedade dos dados ao revisar alterações de persistência.
+O [OpenAPI do Núcleo](../services/core/openapi/openapi.json) e o [de Incidentes](../services/incidents/openapi/openapi.json) são a fonte dos contratos. As rotas internas usam uma credencial dedicada e ficam fora do Gateway. Cada serviço valida JWT e roles localmente. As credenciais entre serviços não são encaminhadas pelo Gateway. Os clientes internos têm três segundos por operação, e o Gateway tem oito segundos. O [guia operacional](operations.md) descreve os códigos de falha.
 
-## Continuidade para o D3
+Bloqueio de URL, destino de DNS ou redirecionamento não é queda do serviço monitorado. A política usa a resolução efetiva da conexão com validação de todos os endereços, agentes diretos e TLS padrão. Limites, exceção de teste e riscos residuais estão no ADR 0003. O armazenamento de senha segue com bcrypt, e o digest de recuperação é invalidado na mesma instrução que grava a senha nova.
 
-| Candidato | Contratos e dependências | Risco e esforço |
-|---|---|---|
-| Núcleo de Monitoramento + Identidade | Mantém usuários, credenciais, monitores, execuções, checagens HTTP e SMTP de recuperação. Pode fornecer leitura da configuração do monitor e publicar resultados em etapa futura | Políticas de exclusão e identificação de usuários no gateway precisam ser decididas. Média |
-| Incidentes | Recebe resultado da checagem, resolve transições e expõe histórico. Candidato para produzir mudança de estado e fornecer consultas autenticadas | Separar FK de monitor, alertas incluídos nas respostas e semântica da resolução manual. Média a alta |
-| Notificações | Recebe transição confirmada, localiza destinatário por contrato e persiste o alerta. Pode ser extraído separadamente conforme o escopo do D3 | Separar relações com monitor e incidente, definir identidade de destinatário e demonstrar entrega durável em desafio posterior. Alta |
+O PostgreSQL impede dois incidentes abertos do mesmo monitor. Apenas abertura ou recuperação vencedora pede alerta. Uma execução sem entrega ao serviço de Incidentes permanece no Núcleo. Nenhum retry automático reordena resultados. Um resultado antigo entregue depois da recuperação ainda pode abrir outro incidente. A gravação de alertas é independente da transição. Veja [Serviços e comunicação](services.md).
 
-O recorte inicial sugerido para dois serviços é **Núcleo** e **Incidentes**, com Notificações dentro do segundo serviço até a equipe avaliar uma extração própria. Antes de separar, decidir como preservar os joins da API, as exclusões e a ordem de processamento. A [visão do produto](visao-produto.md) registra a hipótese de transação compensável para discussão antes do D5.
+## Matriz de conformidade
 
-## Evidências e critérios do D2
+| Critério | Evidência |
+|---|---|
+| Dois serviços e dois bancos | Workspaces, processos e Dockerfiles separados, invariantes e migrations próprias |
+| Contratos OpenAPI | JSON versionado por serviço, validação sintática e estrutural e comparação de rotas na CI |
+| Gateway | Encaminhamento HTTP, respostas de indisponibilidade e proteção das rotas internas |
+| Docker Compose | Cinco unidades, redes separadas, health checks e smoke previstos no workflow |
+| Contextos e fluxo ponta a ponta | Quatro módulos e suíte com PostgreSQL duplo, Gateway, HTTP interno e alvo controlado |
+| Decisões e CI | ADRs 0000 e 0001 históricos, ADRs 0002 e 0003 atuais e job de validação |
 
-| Critério | Evidência | Situação |
-|---|---|---|
-| Monólito modular e pelo menos três contextos | Quatro pontos públicos, persistência com acesso por proprietário e composição no mesmo processo | Implementado e verificado por inspeção e guard |
-| Um fluxo funcional ponta a ponta | [Teste do ciclo](../tests/integration/monitoringWorkflow.test.js) com PostgreSQL, Express, scheduler e alvo HTTP local | Aprovado na CI com PostgreSQL 15 |
-| Aplicação demonstrável | [Roteiro da vitrine](vitrine-d2.md), configuração do Compose aceita e migrations SQL verificadas | Inicialização do servidor e scheduler, health e Swagger aprovados na CI. Ensaio da apresentação pendente |
-| Diagrama, domínio e decisões | [Domínio](dominio.md), diagramas acima e [ADR 0001](adr/0001-monolito-modular.md) | Documentado |
-| Processo de entrega | [CI](../.github/workflows/ci.yml) com guard e suíte do D1 preservada | CI do D2 aprovada |
+A referência do D2 integrado tinha 59 testes de integração e 7 do guard. O workflow do D3 valida testes individuais, concorrência, dependências, contratos e execução dos contêineres. Consulte o resultado no commit avaliado.
 
-A baseline é o [D1 integrado na main](https://github.com/danieLx77/uptime-core-PI/commit/0b9f25b4202c59cc7578520d993321287a7bcf6d). A [CI do conteúdo equivalente do PR #2](https://github.com/danieLx77/uptime-core-PI/actions/runs/45288425997) registrou 58 testes aprovados, 11 suítes e cobertura de 85,51% de linhas e 60% de branches. A [CI anterior à revisão técnica do D2](https://github.com/danieLx77/uptime-core-PI/actions/runs/45291892962) registrou 59 testes aprovados em 12 suítes, além de 5 verificações de arquitetura. Nessa execução, a cobertura foi de 86,08% de linhas, 67,58% de branches e 90,47% de funções. Na baseline, a cobertura de funções foi de 93,75%. O parser do Compose passou localmente. O daemon Docker estava indisponível para executar a composição completa. Configurações administrativas de GitHub Projects, branch protection e SonarCloud requerem confirmação externa.
+## Continuidade
 
-## Leitura complementar
-
-- [Serviços e fluxo executado](services.md)
-- [Domínio, glossário e Event Storming](dominio.md)
-- [Roteiro da vitrine](vitrine-d2.md)
-- [ADR 0001 — Monólito modular](adr/0001-monolito-modular.md)
+- D4: o produtor natural é Monitoramento, com evento de checagem concluída vinculado ao ID da execução. A transação local pode passar a gravar execução e Outbox juntas.
+- D5: ativação de monitor com política de notificação continua candidata se houver etapas e compensações legítimas.
+- D6: respostas administrativas enriquecidas são candidatas a projeções de leitura.
+- D7: as chamadas do Gateway e dos clientes internos são pontos naturais de observabilidade e resiliência.
+- D8: os builds já são separáveis. O ambiente alvo ainda precisa de TLS, segredos gerenciados, saída de rede controlada e estratégia de migração.
