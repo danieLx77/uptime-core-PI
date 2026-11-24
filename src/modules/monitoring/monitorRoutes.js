@@ -1,10 +1,7 @@
 import { Router } from 'express';
-import MonitorController from '../controllers/MonitorController.js';
-import authMiddleware from '../middlewares/auth.js';
+import MonitorController from './MonitorController.js';
 
 const routes = new Router();
-
-routes.use(authMiddleware);
 
 routes.post('/', MonitorController.create);
 routes.get('/', MonitorController.index);

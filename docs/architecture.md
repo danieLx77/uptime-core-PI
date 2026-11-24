@@ -1,614 +1,92 @@
-# 🏗️ **Arquitetura**
+# Arquitetura do Uptime Core PI
 
-Este documento descreve a arquitetura da UptimeCore API, sua organização interna, responsabilidades das camadas, fluxo principal da aplicação, modelo de dados e decisões de domínio.
+O Uptime Core PI roda em um único processo Node.js com Express, scheduler e Prisma. O PostgreSQL continua compartilhado fisicamente. O D2 organiza o código em contextos que expõem operações públicas e controlam os próprios acessos de escrita.
 
-A UptimeCore API é uma aplicação backend construída com **Node.js**, **Express**, **Prisma** e **PostgreSQL**. O projeto segue uma arquitetura em camadas, com separação entre configuração da aplicação, rotas HTTP, middlewares, controllers, services e persistência.
-
-## 🌐 **Visão Geral**
-
-A API foi desenhada para monitorar disponibilidade de URLs e serviços HTTP. Usuários autenticados podem cadastrar monitores, e a aplicação executa verificações periódicas para registrar tempo de resposta, falhas, incidentes e alertas.
+## C4 · Contexto do sistema
 
 ```mermaid
 flowchart TD
-    Client[Cliente HTTP] --> App[Express App]
-
-    App --> Routes[Rotas]
-    Routes --> Middlewares[Middlewares]
-    Routes --> Controllers[Controllers]
-
-    Controllers --> Services[Services]
-    Controllers --> Prisma[Prisma Client]
-
-    Services --> Prisma
-    Services --> External[URLs monitoradas]
-    Services --> Mail[Servidor SMTP]
-
-    Prisma --> Database[(PostgreSQL)]
-
-    App --> Swagger[Swagger UI]
+    Account["Usuário ou administrador"] -->|Cadastra e consulta| System["Uptime Core PI"]
+    System -->|Verifica disponibilidade HTTP| Target["Serviço monitorado"]
+    System -->|Envia recuperação de senha| SMTP["Servidor SMTP"]
 ```
 
-## 🧱 **Estilo Arquitetural**
-
-O projeto utiliza uma arquitetura em camadas simples e objetiva, adequada para uma API REST.
-
-As principais camadas são:
-
-| Camada | Responsabilidade |
-|---|---|
-| `app` | Configuração da aplicação Express, middlewares globais, rotas e tratamento de erros |
-| `server` | Inicialização do servidor HTTP e serviços em background |
-| `routes` | Declaração dos endpoints e associação com controllers |
-| `middlewares` | Interceptação de requisições para autenticação, autorização e erros |
-| `controllers` | Entrada HTTP, validações básicas, chamadas de domínio e formatação de resposta |
-| `services` | Regras operacionais, monitoramento e integrações auxiliares |
-| `config` | Configurações de infraestrutura, banco, e-mail e Swagger |
-| `prisma` | Schema, migrations e acesso ao banco de dados |
-| `tests` | Testes de integração da API |
-
-## 🔄 **Fluxo de Requisição HTTP**
-
-O fluxo padrão de uma requisição é:
-
-```mermaid
-sequenceDiagram
-    participant Client as Cliente
-    participant App as Express App
-    participant Route as Route
-    participant Middleware as Middleware
-    participant Controller as Controller
-    participant Prisma as Prisma Client
-    participant DB as PostgreSQL
-
-    Client->>App: HTTP Request
-    App->>Route: Encaminha para rota
-    Route->>Middleware: Executa autenticação/autorização
-    Middleware->>Controller: Libera requisição
-    Controller->>Prisma: Consulta ou persiste dados
-    Prisma->>DB: Executa query
-    DB-->>Prisma: Retorna dados
-    Prisma-->>Controller: Retorna resultado
-    Controller-->>Client: HTTP Response
-```
-
-Exemplo prático:
-
-1. O cliente envia `POST /api/monitors`.
-2. A rota de monitores aplica o middleware de autenticação.
-3. O middleware valida o token JWT.
-4. O controller recebe `name`, `url` e `interval_minutes`.
-5. O controller valida a URL.
-6. O Prisma persiste o monitor no PostgreSQL.
-7. A API retorna o monitor criado com status `201`.
-
-## ⏱️ **Fluxo de Monitoramento**
-
-Além das requisições HTTP tradicionais, a aplicação possui um fluxo em background para monitoramento.
+## C4 · Contêineres
 
 ```mermaid
 flowchart TD
-    Server[src/server.js] --> Scheduler[SchedulerService]
-    Scheduler --> Monitors[Busca monitores ativos]
-    Monitors --> Ping[PingService]
-    Ping --> Target[URL monitorada]
-    Target --> Result[Resultado da checagem]
-    Result --> Execution[Registra CheckExecution]
-    Result --> Incident[Cria ou resolve Incident]
-    Incident --> Alert[Registra Alert]
-    Alert --> Mail[Nodemailer / SMTP]
+    Client["Cliente da API"] -->|HTTP e JWT| App["Aplicação Node.js com Express e scheduler"]
+    App -->|Prisma| DB[("PostgreSQL")]
+    App -->|HTTP| Target["Alvo monitorado"]
+    App -->|SMTP| Mail["Servidor de e-mail"]
 ```
 
-Responsabilidades principais:
+O banco de testes do Compose serve à suíte. A aplicação usa um banco de execução.
 
-- `SchedulerService`: inicia o processo periódico de checagem.
-- `PingService`: executa chamadas HTTP para as URLs monitoradas.
-- `IncidentService`: registra execuções, abre incidentes e resolve incidentes.
-- `AlertService`: registra alertas relacionados a incidentes e simula/envia notificações.
-
-## 🧭 **Fluxo Administrativo Operacional**
-
-Além das rotas de domínio usadas por usuários comuns, a API possui endpoints administrativos para auditoria e manutenção controlada das entidades operacionais.
-
-Essas rotas ficam sob `/api/admin` e exigem:
-
-- Token JWT válido.
-- Perfil `ADMIN`.
+## C4 · Componentes e mapa de contextos
 
 ```mermaid
 flowchart TD
-    Admin[Administrador] --> AdminRoutes["/api/admin"]
-    AdminRoutes --> Auth[authMiddleware]
-    Auth --> Role[isAdmin]
-    Role --> AdminControllers[Controllers Administrativos]
-
-    AdminControllers --> Incidents[Incidents]
-    AdminControllers --> Alerts[Alerts]
-    AdminControllers --> Executions[CheckExecutions]
-
-    Incidents --> Prisma[Prisma Client]
-    Alerts --> Prisma
-    Executions --> Prisma
-
-    Prisma --> Database[(PostgreSQL)]
+    HTTP["Composição HTTP em app e adminRoutes"] -->|Autenticação, autorização e rotas| Identity["Identidade e acesso"]
+    HTTP -->|CRUD e histórico de checagens| Monitoring["Monitoramento"]
+    HTTP -->|Operações administrativas| Incidents["Incidentes"]
+    HTTP -->|Histórico administrativo| Notifications["Notificações"]
+    Flow["Composição do ciclo em monitoringWorkflow"] -->|Registra execução e lê destinatário| Monitoring
+    Flow -->|Interpreta resultado| Incidents
+    Flow -->|Registra alerta de transição| Notifications
+    Monitoring -. "Scheduler entrega resultado ao callback" .-> Flow
 ```
 
-Esses endpoints não substituem os services. Eles existem para consulta, auditoria, suporte e manutenção controlada do histórico operacional.
+As setas contínuas mostram as chamadas feitas pela composição. A seta pontilhada é a invocação do callback configurado na inicialização. Os contextos ficam em `src/modules/`. Os imports entre eles são proibidos, inclusive para pontos públicos. A composição acessa apenas os `index.js`. Os quatro módulos são componentes internos da aplicação.
 
-## 🔐 **Autenticação e Autorização**
-
-A autenticação é baseada em JWT.
-
-```mermaid
-sequenceDiagram
-    participant Client as Cliente
-    participant Auth as Auth Controller
-    participant DB as PostgreSQL
-    participant JWT as JWT
-
-    Client->>Auth: POST /api/auth/login
-    Auth->>DB: Busca usuário por e-mail
-    DB-->>Auth: Retorna usuário
-    Auth->>Auth: Compara senha com bcrypt
-    Auth->>JWT: Assina token com id e role
-    JWT-->>Client: Retorna token
-```
-
-O token JWT inclui informações essenciais para autorização:
-
-```json
-{
-  "id": "user-id",
-  "role": "USER"
-}
-```
-
-As rotas protegidas utilizam o middleware de autenticação para extrair e validar o token.
-
-### **Níveis de acesso**
-
-| Perfil | Permissões |
-|---|---|
-| `USER` | Gerenciar o próprio perfil e seus próprios monitores |
-| `ADMIN` | Acessar rotas administrativas e visualizar/manter recursos operacionais |
-
-## 📁 **Organização dos Arquivos**
-
-```text
-src/
-├── app.js
-├── server.js
-├── config/
-│   ├── database.js
-│   ├── mail.js
-│   └── swagger.js
-├── controllers/
-│   ├── AdminAlertController.js
-│   ├── AdminCheckExecutionController.js
-│   ├── AdminIncidentController.js
-│   ├── MonitorController.js
-│   ├── PasswordController.js
-│   ├── SessionController.js
-│   └── UserController.js
-├── docs/
-│   └── swaggerSource.js
-├── middlewares/
-│   ├── auth.js
-│   ├── errorMiddleware.js
-│   └── isAdmin.js
-├── routes/
-│   ├── adminRoutes.js
-│   ├── authRoutes.js
-│   ├── monitorRoutes.js
-│   └── userRoutes.js
-├── services/
-│   ├── AlertService.js
-│   ├── IncidentService.js
-│   ├── PingService.js
-│   └── SchedulerService.js
-└── utils/
-    └── AppError.js
-```
-
-## 🧩 **Responsabilidades por Diretório**
-
-### **`src/app.js`**
-
-Responsável pela configuração principal da aplicação Express.
-
-Inclui:
-
-- Inicialização do Express.
-- Configuração de CORS.
-- Parsing de JSON.
-- Remoção do header `X-Powered-By`.
-- Exposição do Swagger em `/api/docs`.
-- Rotas de apresentação da API.
-- Health check.
-- Registro dos grupos de rotas.
-- Tratamento de rota não encontrada.
-- Middleware global de erros.
-
-### **`src/server.js`**
-
-Responsável por iniciar a aplicação.
-
-Também inicializa o motor de monitoramento por meio do `SchedulerService`.
-
-### **`src/routes`**
-
-Contém a definição dos grupos de rotas.
-
-| Arquivo | Base path | Responsabilidade |
+| Contexto | Responsabilidade e dados próprios | Contratos públicos e consumidores |
 |---|---|---|
-| `authRoutes.js` | `/api/auth` | Registro, login e recuperação de senha |
-| `userRoutes.js` | `/api/users` | Operações de usuário |
-| `monitorRoutes.js` | `/api/monitors` | Operações de monitores |
-| `adminRoutes.js` | `/api/admin` | Métricas, auditoria e manutenção administrativa |
+| [Identidade e acesso](../src/modules/identity/index.js) | Cria, consulta, atualiza e exclui `User`. Gerencia credenciais, sessão, recuperação via SMTP e autorização administrativa | `authRoutes`, `userRoutes`, `authenticate`, `requireAdmin` e `countUsers()` para composição HTTP |
+| [Monitoramento](../src/modules/monitoring/index.js) | Controla `Monitor` e `CheckExecution`, cadastro, agenda, requisição HTTP e registro da execução | Rotas de monitores e de execuções, `countMonitors()`, `scheduler`, `saveExecution(monitorId, result)` e `findAlertRecipient(monitorId)` |
+| [Incidentes](../src/modules/incidents/index.js) | Cria, resolve, reabre, consulta e exclui `Incident`. Aplica transições automáticas a partir do resultado da checagem | Rotas administrativas e `incidentService.handleStatus(monitorId, result)`, que informa a transição e o incidente |
+| [Notificações](../src/modules/notifications/index.js) | Cria, consulta e exclui `Alert`. Decide o conteúdo conforme a transição recebida e registra o alerta simulado | Rotas administrativas e `alertService.sendMockEmail(monitorId, incidentId, status, reason, findRecipient)`. A composição fornece a função de leitura do destinatário |
 
-### **`src/controllers`**
-
-Controllers recebem as requisições HTTP e coordenam as ações necessárias.
+### Propriedade e exceções de leitura
 
-Eles são responsáveis por:
-
-- Ler parâmetros, query strings e body.
-- Aplicar validações básicas.
-- Chamar Prisma ou services.
-- Retornar respostas HTTP adequadas.
-- Garantir que dados sensíveis não sejam expostos.
-
-Controllers administrativos adicionados:
-
-| Controller | Responsabilidade |
-|---|---|
-| `AdminIncidentController.js` | Consulta, resolução, reabertura e remoção controlada de incidentes |
-| `AdminAlertController.js` | Consulta e remoção controlada de alertas |
-| `AdminCheckExecutionController.js` | Consulta e remoção controlada de execuções de checagem |
-
-### **`src/middlewares`**
-
-Middlewares interceptam requisições antes dos controllers.
-
-| Middleware | Responsabilidade |
-|---|---|
-| `auth.js` | Validar JWT e anexar dados do usuário à requisição |
-| `isAdmin.js` | Garantir que apenas administradores acessem rotas restritas |
-| `errorMiddleware.js` | Padronizar respostas de erro |
-
-### **`src/services`**
-
-Services encapsulam operações auxiliares e lógicas que não pertencem diretamente ao ciclo HTTP.
-
-| Service | Responsabilidade |
-|---|---|
-| `SchedulerService.js` | Agendar e coordenar checagens periódicas |
-| `PingService.js` | Executar chamadas HTTP para URLs monitoradas |
-| `IncidentService.js` | Registrar execuções, abrir incidentes e resolver incidentes |
-| `AlertService.js` | Gerenciar alertas e envio/simulação de notificações |
-
-### **`src/config`**
-
-Centraliza configurações de infraestrutura.
-
-| Arquivo | Responsabilidade |
-|---|---|
-| `database.js` | Instancia e exporta o Prisma Client |
-| `mail.js` | Configura transporte SMTP com Nodemailer |
-| `swagger.js` | Carrega a documentação Swagger gerada |
-
-### **`src/utils`**
-
-Contém utilitários reutilizáveis.
-
-Atualmente inclui:
-
-- `AppError.js`: classe para representar erros operacionais da aplicação.
-
-## 🗄️ **Modelo de Dados**
-
-O banco de dados é modelado com Prisma e PostgreSQL.
-
-Entidades principais:
-
-- `User`
-- `Monitor`
-- `CheckExecution`
-- `Incident`
-- `Alert`
-
-```mermaid
-erDiagram
-    User ||--o{ Monitor : possui
-    Monitor ||--o{ CheckExecution : gera
-    Monitor ||--o{ Incident : registra
-    Monitor ||--o{ Alert : dispara
-    Incident ||--o{ Alert : referencia
-
-    User {
-        string id
-        string name
-        string email
-        string password_hash
-        Role role
-        string passwordResetToken
-        datetime passwordResetExpires
-        datetime createdAt
-        datetime updatedAt
-    }
-
-    Monitor {
-        string id
-        string userId
-        string name
-        string url
-        int interval_minutes
-        MonitorStatus status
-        datetime createdAt
-        datetime updatedAt
-    }
-
-    CheckExecution {
-        string id
-        string monitorId
-        int status_code
-        int response_time_ms
-        datetime timestamp
-    }
-
-    Incident {
-        string id
-        string monitorId
-        IncidentStatus status
-        string errorLog
-        datetime startedAt
-        datetime resolvedAt
-    }
+Cada `persistence.js` disponibiliza ao respectivo módulo somente os delegates Prisma dos modelos da tabela acima. Os handlers HTTP chamam suas operações de persistência locais. Os testes de integração usam o cliente compartilhado para montar e verificar fixtures.
 
-    Alert {
-        string id
-        string monitorId
-        string incidentId
-        string type
-        string message
-        datetime sentAt
-    }
-```
-
-## 🧑‍💻 **Entidades**
-
-### **User**
-
-Representa um usuário da aplicação.
-
-Campos principais:
-
-| Campo | Descrição |
-|---|---|
-| `id` | Identificador único |
-| `name` | Nome do usuário |
-| `email` | E-mail único |
-| `password_hash` | Hash da senha |
-| `role` | Perfil do usuário |
-| `passwordResetToken` | Token temporário de recuperação |
-| `passwordResetExpires` | Expiração do token de recuperação |
+As consultas administrativas preservam os relacionamentos projetados pelo contrato HTTP. Incidentes lê monitores e alertas pelo Prisma. Notificações lê monitores e incidentes. Monitoramento lê nome e e-mail do dono para detalhar um monitor e preparar o destinatário de um alerta. A leitura do destinatário permanece em uma consulta relacional. O módulo de Notificações recebe essa capacidade por parâmetro. A recuperação de acesso continua em Identidade e é o único fluxo que usa SMTP.
 
-Relacionamentos:
+As chaves estrangeiras e o comportamento de cascata permanecem no schema. A exclusão de usuário ou monitor pode remover registros descendentes, e a exclusão de incidente zera a referência nos alertas quando aplicável. São efeitos do banco já previstos no [schema Prisma](../prisma/schema.prisma). Na extração será necessário decidir a retenção do histórico e substituir joins e cascatas entre serviços.
 
-- Um usuário pode possuir vários monitores.
+## Comunicação e proteção de fronteiras
 
-### **Monitor**
+[monitoringWorkflow.js](../src/monitoringWorkflow.js) coordena chamadas síncronas aguardadas no mesmo processo. Monitoramento grava uma execução, Incidentes determina a transição e Notificações registra alerta quando o estado muda. As escritas continuam em operações separadas. Falha ao persistir uma execução interrompe o processamento do resultado. Falha no alerta deixa a transição de incidente registrada.
 
-Representa uma URL monitorada.
+`npm run test:architecture` analisa imports e reexports estáticos com o parser Acorn em `scripts/architecture/check.mjs`. A configuração do banco é o único arquivo de produção autorizado a importar os pacotes de cliente e adaptador do Prisma. Apenas os módulos de persistência podem importar o cliente compartilhado. Os pontos públicos declaram exports nomeados e o guard rejeita reexports com `*`, inclusive namespaces. A integração passa pelos três arquivos de composição declarados. A regra impede ciclos estáticos entre contextos. Os sete testes do guard incluem imports privados, dependências em ambas as direções, imports do Prisma e reexports irrestritos. A CI executa o comando no mesmo job do lint e da integração.
 
-Campos principais:
+O analisador cobre ESM estático em `src/**/*.js`. Imports dinâmicos, chamadas em runtime, módulos fora de `src` e acesso relacional dentro de delegates Prisma ficam fora da inspeção. Preserve a propriedade dos dados ao revisar alterações de persistência.
 
-| Campo | Descrição |
-|---|---|
-| `id` | Identificador único |
-| `userId` | Dono do monitor |
-| `name` | Nome descritivo |
-| `url` | URL monitorada |
-| `interval_minutes` | Intervalo entre checagens |
-| `status` | Estado do monitor |
+## Continuidade para o D3
 
-Relacionamentos:
+| Candidato | Contratos e dependências | Risco e esforço |
+|---|---|---|
+| Núcleo de Monitoramento + Identidade | Mantém usuários, credenciais, monitores, execuções, checagens HTTP e SMTP de recuperação. Pode fornecer leitura da configuração do monitor e publicar resultados em etapa futura | Políticas de exclusão e identificação de usuários no gateway precisam ser decididas. Média |
+| Incidentes | Recebe resultado da checagem, resolve transições e expõe histórico. Candidato para produzir mudança de estado e fornecer consultas autenticadas | Separar FK de monitor, alertas incluídos nas respostas e semântica da resolução manual. Média a alta |
+| Notificações | Recebe transição confirmada, localiza destinatário por contrato e persiste o alerta. Pode ser extraído separadamente conforme o escopo do D3 | Separar relações com monitor e incidente, definir identidade de destinatário e demonstrar entrega durável em desafio posterior. Alta |
 
-- Pertence a um usuário.
-- Possui várias execuções de checagem.
-- Pode possuir vários incidentes.
-- Pode gerar vários alertas.
+O recorte inicial sugerido para dois serviços é **Núcleo** e **Incidentes**, com Notificações dentro do segundo serviço até a equipe avaliar uma extração própria. Antes de separar, decidir como preservar os joins da API, as exclusões e a ordem de processamento. A [visão do produto](visao-produto.md) registra a hipótese de transação compensável para discussão antes do D5.
 
-### **CheckExecution**
+## Evidências e critérios do D2
 
-Representa uma execução de checagem.
+| Critério | Evidência | Situação |
+|---|---|---|
+| Monólito modular e pelo menos três contextos | Quatro pontos públicos, persistência com acesso por proprietário e composição no mesmo processo | Implementado e verificado por inspeção e guard |
+| Um fluxo funcional ponta a ponta | [Teste do ciclo](../tests/integration/monitoringWorkflow.test.js) com PostgreSQL, Express, scheduler e alvo HTTP local | Aprovado na CI com PostgreSQL 15 |
+| Aplicação demonstrável | [Roteiro da vitrine](vitrine-d2.md), configuração do Compose aceita e migrations SQL verificadas | Inicialização do servidor e scheduler, health e Swagger aprovados na CI. Ensaio da apresentação pendente |
+| Diagrama, domínio e decisões | [Domínio](dominio.md), diagramas acima e [ADR 0001](adr/0001-monolito-modular.md) | Documentado |
+| Processo de entrega | [CI](../.github/workflows/ci.yml) com guard e suíte do D1 preservada | CI do D2 aprovada |
 
-Campos principais:
+A baseline é o [D1 integrado na main](https://github.com/danieLx77/uptime-core-PI/commit/0b9f25b4202c59cc7578520d993321287a7bcf6d). A [CI do conteúdo equivalente do PR #2](https://github.com/danieLx77/uptime-core-PI/actions/runs/45288425997) registrou 58 testes aprovados, 11 suítes e cobertura de 85,51% de linhas e 60% de branches. A [CI anterior à revisão técnica do D2](https://github.com/danieLx77/uptime-core-PI/actions/runs/45291892962) registrou 59 testes aprovados em 12 suítes, além de 5 verificações de arquitetura. Nessa execução, a cobertura foi de 86,08% de linhas, 67,58% de branches e 90,47% de funções. Na baseline, a cobertura de funções foi de 93,75%. O parser do Compose passou localmente. O daemon Docker estava indisponível para executar a composição completa. Configurações administrativas de GitHub Projects, branch protection e SonarCloud requerem confirmação externa.
 
-| Campo | Descrição |
-|---|---|
-| `id` | Identificador único |
-| `monitorId` | Monitor relacionado |
-| `status_code` | Código HTTP retornado |
-| `response_time_ms` | Tempo de resposta em milissegundos |
-| `timestamp` | Momento da checagem |
+## Leitura complementar
 
-Observação:
-
-- Existe índice em `monitorId` e `timestamp` para otimizar consultas históricas por monitor.
-- É uma entidade operacional gerada automaticamente pelo fluxo de monitoramento.
-- Não deve ser criada ou editada manualmente por endpoint público.
-
-### **Incident**
-
-Representa uma falha detectada em um monitor.
-
-Campos principais:
-
-| Campo | Descrição |
-|---|---|
-| `id` | Identificador único |
-| `monitorId` | Monitor relacionado |
-| `status` | Estado do incidente |
-| `errorLog` | Detalhes da falha |
-| `startedAt` | Início do incidente |
-| `resolvedAt` | Resolução do incidente |
-
-Observação:
-
-- É criado automaticamente quando um monitor falha.
-- É resolvido automaticamente quando o monitor volta a responder.
-- Também pode ser resolvido ou reaberto por ação administrativa controlada.
-
-### **Alert**
-
-Representa uma notificação associada a um monitor ou incidente.
-
-Campos principais:
-
-| Campo | Descrição |
-|---|---|
-| `id` | Identificador único |
-| `monitorId` | Monitor relacionado |
-| `incidentId` | Incidente relacionado, quando existir |
-| `type` | Tipo do alerta |
-| `message` | Mensagem enviada |
-| `sentAt` | Data de envio |
-
-Observação:
-
-- É criado automaticamente pelo `AlertService`.
-- Representa histórico operacional de notificações.
-- Não possui criação ou edição manual via endpoint.
-
-## 📚 **Enums**
-
-### **Role**
-
-```text
-USER
-ADMIN
-```
-
-### **MonitorStatus**
-
-```text
-ACTIVE
-PAUSED
-```
-
-### **IncidentStatus**
-
-```text
-OPEN
-RESOLVED
-```
-
-## 🏛️ **Decisões Arquiteturais**
-
-### **Separação entre `app.js` e `server.js`**
-
-A aplicação Express fica isolada em `app.js`, enquanto a inicialização do servidor fica em `server.js`.
-
-Isso facilita:
-
-- Testes de integração sem abrir porta HTTP manualmente.
-- Reuso do app em Supertest.
-- Inicialização controlada de serviços em background.
-- Separação entre configuração da aplicação e execução do processo.
-
-### **Swagger gerado antes do runtime**
-
-A documentação Swagger é gerada por script e carregada no runtime.
-
-Benefícios:
-
-- Evita geração dinâmica a cada inicialização.
-- Reduz complexidade em produção.
-- Garante que o build já contenha a documentação necessária.
-
-### **Prisma como camada de persistência**
-
-O Prisma centraliza:
-
-- Modelagem do banco.
-- Migrations.
-- Tipagem e estrutura das consultas.
-- Acesso padronizado ao PostgreSQL.
-
-### **Services para tarefas operacionais**
-
-A lógica de monitoramento, ping, incidentes e alertas fica em `services`, separada dos controllers.
-
-Isso evita que controllers fiquem responsáveis por tarefas de background ou integração externa.
-
-### **Entidades operacionais sem CRUD genérico**
-
-`CheckExecution`, `Incident` e `Alert` são entidades operacionais. Elas representam fatos gerados pelo sistema, não cadastros livres manipulados diretamente por usuários.
-
-Por isso, a API não expõe CRUD genérico para essas entidades.
-
-A decisão preserva:
-
-- Integridade do histórico operacional.
-- Rastreabilidade de falhas.
-- Coerência entre checagens, incidentes e alertas.
-- Separação entre ações humanas e eventos gerados pelo monitoramento.
-
-Em vez de criação e edição manual genérica, a API expõe endpoints administrativos controlados:
-
-| Entidade | Endpoints administrativos |
-|---|---|
-| `Incident` | Listar, buscar, resolver, reabrir e remover |
-| `Alert` | Listar, buscar e remover |
-| `CheckExecution` | Listar, buscar e remover |
-
-Essa abordagem atende ao objetivo de manutenção e auditoria sem comprometer o modelo de domínio.
-
-## 🧪 **Testes de Integração**
-
-A API possui testes de integração com Jest e Supertest.
-
-Além dos testes de autenticação, usuários, monitores e regras de incidentes, há testes específicos para os endpoints administrativos operacionais:
-
-```text
-tests/integration/adminIncident.test.js
-tests/integration/adminAlert.test.js
-tests/integration/adminCheckExecution.test.js
-```
-
-Esses testes validam:
-
-- Bloqueio sem token.
-- Bloqueio para usuário comum.
-- Acesso com perfil `ADMIN`.
-- Listagem e busca por ID.
-- Filtros operacionais.
-- Ações controladas de incidentes.
-- Remoção administrativa.
-
-## 🚀 **Pontos de Extensão**
-
-A arquitetura atual permite evoluções como:
-
-- Adição de refresh token.
-- Rate limiting.
-- Logs estruturados.
-- Métricas com Prometheus.
-- Filas para checagens assíncronas.
-- Notificações por webhook, Slack ou Discord.
-- Dashboard com histórico de uptime.
-- Multi-tenancy.
-- Separação entre worker de monitoramento e API HTTP.
-- Auditoria detalhada para ações administrativas.
-- Registro de motivo para resolução/reabertura manual de incidentes.
-
-## 📝 **Considerações**
-
-A arquitetura atual é adequada para um MVP backend robusto, com boa separação de responsabilidades e base preparada para evolução.
-
-O ponto mais importante do desenho é separar claramente:
-
-- **Entidades gerenciáveis pelo usuário**, como `User` e `Monitor`.
-- **Entidades operacionais geradas pelo sistema**, como `CheckExecution`, `Incident` e `Alert`.
-
-Para cargas maiores, o principal ponto de evolução seria separar o processo de monitoramento em um worker independente, usando fila ou scheduler externo. Isso permitiria escalar a API HTTP e o motor de checagens de forma separada.
+- [Serviços e fluxo executado](services.md)
+- [Domínio, glossário e Event Storming](dominio.md)
+- [Roteiro da vitrine](vitrine-d2.md)
+- [ADR 0001 — Monólito modular](adr/0001-monolito-modular.md)

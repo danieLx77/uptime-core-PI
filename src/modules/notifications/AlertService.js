@@ -1,16 +1,12 @@
-import prisma from '../config/database.js';
+import prisma from './persistence.js';
 
 class AlertService {
   /**
    * Registra a intenção de envio de e-mail no banco e simula a saída no terminal.
    */
-  async sendMockEmail(monitorId, incidentId, status, reason) {
+  async sendMockEmail(monitorId, incidentId, status, reason, findRecipient) {
     try {
-      // Busca os dados do monitor e do usuário para enriquecer o e-mail
-      const monitor = await prisma.monitor.findUnique({
-        where: { id: monitorId },
-        include: { user: { select: { name: true, email: true } } },
-      });
+      const monitor = await findRecipient(monitorId);
 
       if (!monitor || !monitor.user) return;
 

@@ -4,6 +4,8 @@ Este documento reúne as informações operacionais da UptimeCore API: Docker, d
 
 O objetivo é documentar como a aplicação é empacotada, publicada, monitorada e mantida.
 
+> As orientações de Render, SonarCloud e deploy abaixo descrevem a infraestrutura histórica da origem. Para o projeto acadêmico, siga a CI da API na seção de CI/CD e a execução local do README.
+
 ## 📚 Sumário
 
 - [Visão Geral](#-visão-geral)
@@ -189,117 +191,7 @@ Essa secret deve conter a URL do deploy hook gerado pela Render.
 
 ## 🔁 CI/CD
 
-A pipeline está definida em:
-
-```text
-.github/workflows/pipeline.yml
-```
-
-Ela roda em:
-
-```yaml
-push:
-  branches: ["develop", "main"]
-
-pull_request:
-  branches: ["develop", "main"]
-```
-
-## 🔎 Etapas da Pipeline
-
-### Checkout do código
-
-Usa:
-
-```yaml
-actions/checkout@v4
-```
-
-Com `fetch-depth: 0`, necessário para análises mais completas no SonarCloud.
-
-### Setup do Node.js
-
-Usa Node.js 24:
-
-```yaml
-node-version: "24"
-```
-
-### Instalação de dependências
-
-```bash
-npm ci
-```
-
-O `npm ci` garante instalação limpa e reprodutível baseada no `package-lock.json`.
-
-### Geração do Prisma Client
-
-```bash
-npx prisma generate
-```
-
-### Análise estática
-
-```bash
-npm run lint
-```
-
-### Banco de testes
-
-A pipeline provisiona um PostgreSQL temporário com:
-
-| Campo | Valor |
-|---|---|
-| Usuário | `admin` |
-| Senha | `admin` |
-| Banco | `api_monitor_test_db` |
-| Porta externa | `5433` |
-
-### Configuração do `.env.test`
-
-A pipeline cria dinamicamente:
-
-```env
-DATABASE_URL="postgresql://admin:admin@localhost:5433/api_monitor_test_db?schema=public"
-JWT_SECRET="segredo_super_seguro_da_pipeline"
-PORT=3001
-```
-
-### Migrations de teste
-
-```bash
-npm run test:db-setup
-```
-
-### Testes e cobertura
-
-```bash
-npm test -- --coverage
-```
-
-### SonarCloud
-
-A análise de qualidade usa:
-
-```yaml
-SonarSource/sonarcloud-github-action@master
-```
-
-Secrets necessárias:
-
-```text
-GITHUB_TOKEN
-SONAR_TOKEN
-```
-
-### Deploy
-
-Ao final da pipeline, o deploy é acionado com:
-
-```bash
-curl -X POST ${{ secrets.RENDER_DEPLOY_HOOK }}
-```
+A [CI da API](../.github/workflows/ci.yml) usa GitHub Actions em PRs para `main` e em pushes para `main` e `desafio-01`. O job usa Node 24 e PostgreSQL 15 descartável com porta atribuída pelo runner. Executa `npm ci`, gera Prisma Client e Swagger, passa pelo lint e pelo guard arquitetural, aplica migrations e verifica o servidor e o scheduler em banco vazio, incluindo health e Swagger. Por fim, executa a suíte com cobertura.
 
 ## 🩺 Health Check
 

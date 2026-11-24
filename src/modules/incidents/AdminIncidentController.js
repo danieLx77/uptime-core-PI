@@ -1,4 +1,4 @@
-import prisma from '../config/database.js';
+import prisma from './persistence.js';
 
 const VALID_INCIDENT_STATUSES = ['OPEN', 'RESOLVED'];
 
