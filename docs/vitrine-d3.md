@@ -1,18 +1,32 @@
 # Vitrine do D3 · Seis minutos
 
-Antes da apresentação, configure `.env` a partir do exemplo, gere segredos distintos e rode `docker compose up --build --wait` em uma composição de demonstração. Prepare os bancos de teste descartáveis e `.env.test` conforme o [README](../README.md#testes).
+Prepare antes uma composição descartável e os bancos de testes descartáveis com `.env.test`, seguindo o [README](../README.md#testes). Use uma porta livre para a vitrine e gere os segredos de demonstração.
+
+```bash
+export COMPOSE_PROJECT_NAME=uptime_d3_vitrine
+export GATEWAY_PORT=3300
+export GATEWAY_URL=http://127.0.0.1:3300
+docker compose up -d --build --wait
+```
 
 | Tempo | Demonstração |
 |---|---|
-| 0:00–1:10 | Mostrar `docker compose ps`, os cinco componentes, a porta pública e as redes de dados |
-| 1:10–2:00 | Abrir Swagger em `/api/docs/`, alternar entre Núcleo e Incidentes e indicar chamadas internas |
-| 2:00–4:15 | Rodar o teste abaixo. Mostrar cadastro e login pelo Gateway, alvo controlado, falha repetida, recuperação e as consultas autorizadas |
-| 4:15–5:10 | Rodar os casos concorrentes, explicar o índice parcial e apontar os dois schemas |
-| 5:10–6:00 | Mostrar ADR 0002 e CI, explicar o registro local preservado se Incidentes ficar indisponível |
+| 0:00–1:00 | Mostrar `docker compose ps`, os cinco componentes, a porta pública e as redes de dados. |
+| 1:00–1:45 | Abrir `/api/docs/` no Gateway e alternar entre os dois contratos. |
+| 1:45–3:40 | Rodar o teste do fluxo distribuído. Mostrar as quatro execuções, um incidente e dois alertas. |
+| 3:40–5:40 | Rodar a interrupção e recuperação de Incidentes. Mostrar os códigos e a preservação do registro. |
+| 5:40–6:00 | Apontar o ADR 0002, o índice único parcial e a execução da CI. |
 
 ```bash
-node scripts/smoke-compose.mjs
-npm test -- --runTestsByPath tests/integration/monitoringWorkflow.test.js tests/integration/incidentConcurrency.test.js
+npm test -- --runTestsByPath tests/integration/monitoringWorkflow.test.js
+node scripts/smoke-compose.mjs --incidents-recovery
 ```
 
-O teste usa HTTP de loopback controlado e dispensa SMTP ou serviço público. A saída esperada mostra um incidente aberto e depois resolvido, dois alertas simulados e quatro execuções.
+O teste do fluxo usa HTTP de loopback controlado e dispensa SMTP. O smoke usa um monitor pausado, um incidente de demonstração e dois logins do mesmo usuário descartável, antes e depois de receber a role `ADMIN`. O script limpa as fixtures ao final.
+
+| Etapa da recuperação | Comportamento esperado |
+|---|---|
+| Antes da interrupção | `GET /api/admin/incidents?monitorId=<id>` retorna `200` com o incidente de demonstração e sua projeção do monitor. |
+| `docker compose stop -t 3 incidents` | A mesma consulta autenticada retorna `502`. |
+| Incidentes parado | `GET /api/health` e `GET /api/monitors/<id>` no Gateway retornam `200`. |
+| `docker compose up -d --wait --wait-timeout 45 incidents` | O script espera o health do serviço. A consulta administrativa retorna `200` com o mesmo incidente e a mesma projeção do monitor. |

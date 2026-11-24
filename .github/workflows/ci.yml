@@ -59,6 +59,8 @@ jobs:
       - name: Lint, fronteiras e contratos
         run: |
           npm run lint
+          npm run lint:fix
+          git diff --exit-code
           npm run test:architecture
           npm run test:contracts
           python3 -m venv "$RUNNER_TEMP/openapi"
@@ -107,10 +109,7 @@ jobs:
           docker compose stop core
           docker compose up -d --wait incidents
           docker compose up -d --wait core gateway
-          node scripts/smoke-compose.mjs
-          docker compose restart incidents
-          docker compose up -d --wait incidents
-          node scripts/smoke-compose.mjs
+          node scripts/smoke-compose.mjs --incidents-recovery
       - name: Limpar o ambiente exclusivo da CI
         if: always()
         run: |
