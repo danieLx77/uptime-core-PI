@@ -68,6 +68,18 @@ jobs:
         run: |
           npm run db:migrate
           npm test -- --coverage
+      - name: Validar transferência de dados do D2
+        run: |
+          docker exec "${{ job.services.core-db.id }}" createdb -U test_core legacy_d2_fixture
+          docker exec "${{ job.services.core-db.id }}" createdb -U test_core core_transfer_fixture
+          docker exec "${{ job.services.incidents-db.id }}" createdb -U test_incidents incidents_transfer_fixture
+          export LEGACY_DATABASE_URL="${CORE_DATABASE_URL%/*}/legacy_d2_fixture"
+          export CORE_DATABASE_URL="${CORE_DATABASE_URL%/*}/core_transfer_fixture"
+          export INCIDENTS_DATABASE_URL="${INCIDENTS_DATABASE_URL%/*}/incidents_transfer_fixture"
+          npm run db:migrate
+          docker run --rm --network host -v "$PWD:/repo:ro" -w /repo \
+            -e LEGACY_DATABASE_URL -e CORE_DATABASE_URL -e INCIDENTS_DATABASE_URL \
+            postgres:15 bash scripts/check-d2-transfer.sh
   compose:
     name: Builds independentes e smoke do Compose
     runs-on: ubuntu-latest
