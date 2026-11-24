@@ -38,15 +38,24 @@ Incidentes usa `-w @uptime/incidents` e porta 3002. O Gateway usa `-w @uptime/ga
 
 ## Transferir dados do D2
 
-As migrations históricas em `prisma/` ficam disponíveis como referência. Faça a transferência de um **snapshot verificado** do monólito com os serviços de destino parados. Use três bancos isolados, gere backup da origem e confira as URLs. Crie e migre os destinos com `npm run db:migrate`. O script usa o cliente `psql`.
+Prepare três bancos isolados. Interrompa as escritas no D2 para fixar o ponto de corte, produza um snapshot verificado e mantenha os serviços D3 parados até a conferência. Aplique as migrations do D3 nos dois destinos novos e vazios com `npm run db:migrate`.
+
+Use `psql` com papéis dedicados. Cada conexão precisa executar `pg_catalog.pg_control_system()`, inclusive a da origem. Caso o provedor restrinja a função, peça a concessão de `EXECUTE` ao papel de migração ou use uma cópia isolada administrada pela equipe. A origem precisa de leitura. Os destinos precisam de leitura das tabelas e do histórico Prisma, permissão para inserir e adquirir os locks da transferência. Incidentes também precisa de `TEMP`. Use credenciais por conexão e evite URLs com segredos no histórico do shell.
 
 ```bash
 LEGACY_DATABASE_URL=... CORE_DATABASE_URL=... INCIDENTS_DATABASE_URL=... bash scripts/transfer-d2-data.sh
 ```
 
-A origem é lida em snapshot de repetição de leitura. Cada destino deve estar vazio e recebe uma transação própria. O script preserva IDs, senhas com hash, datas, incidentes, alertas e referências externas. Tokens de recuperação antigos são descartados e precisam ser solicitados novamente. Confira as contagens de exportação e destino que o `psql` exibe, e verifique as referências e consultas antes de liberar os serviços.
+O script compara o identificador do cluster e o OID do banco nas três conexões. Variações da mesma conexão apontam para a mesma identidade. Antes de copiar, ele confirma as tabelas e as colunas usadas, verifica o histórico de migrations e seus checksums e consulta ambos os destinos sem gravar dados. Ele revalida identidade, permissões e destino vazio sob lock antes de cada cópia. Uma cópia física de cluster que conserve a identidade será recusada como possível sobreposição.
 
-Os dois commits de destino podem ocorrer em momentos diferentes. Se o segundo falhar, mantenha os serviços parados, preserve a origem e descarte ou restaure apenas os destinos novos conforme o plano operacional aprovado. O script recusa duplicidade de incidente aberto no snapshot e exige revisão manual. Os CSVs temporários incluem dados sensíveis e saem da máquina somente se o operador deliberadamente os copiar. Execute com permissões restritas e evite URLs com credenciais escritas no histórico do shell.
+A origem é lida sob `REPEATABLE READ READ ONLY`. A transferência preserva IDs, hashes de senhas, datas, incidentes, alertas e relacionamentos. Tokens de recuperação legados são invalidados. Os CSVs ficam em um diretório temporário privado e são removidos ao sair normalmente.
+
+1. Confira o código de saída, as duas confirmações de commit e as contagens do snapshot e dos destinos. Valide amostras de IDs, datas e relacionamentos e confirme a ausência dos tokens legados.
+2. Se houver erro, mantenha os serviços parados. O diagnóstico indica a etapa e quais destinos podem ter recebido dados. Uma perda da conexão durante o commit pode deixar seu resultado indeterminado. Consulte ambos os bancos pelo identificador antes de decidir como restaurar.
+3. Se algum destino tiver sido gravado, preserve a origem e retorne **os dois destinos novos** ao estado inicial vazio. Restaure os backups prévios ou provisione dois substitutos vazios, reaplique as migrations, atualize as URLs e confira suas identidades. O script não apaga nem recria nenhum banco.
+4. Execute a transferência novamente a partir do mesmo snapshot, confira as duas confirmações, os relacionamentos e as consultas administrativas. Só então libere os serviços e conclua o corte do D2.
+
+A CI usa `scripts/check-d2-transfer.sh` com bancos descartáveis para ensaiar destino ocupado, conexões equivalentes, esquema e histórico incompatíveis, falha após o primeiro commit e reexecução bem-sucedida após restauração.
 
 ## Contribuição
 
