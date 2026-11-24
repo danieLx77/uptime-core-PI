@@ -1,8 +1,8 @@
+import '../support/gateway.js';
 import { jest } from '@jest/globals';
-import prisma from '../../src/config/database.js';
-import { findAlertRecipient } from '../../src/modules/monitoring/index.js';
-import { alertService } from '../../src/modules/notifications/index.js';
-import { processCheckResult } from '../../src/monitoringWorkflow.js';
+import prisma from '../support/database.js';
+import { alertService } from '../../services/incidents/src/modules/notifications/index.js';
+import { processCheckResult } from '../../services/core/src/monitoringWorkflow.js';
 
 describe('Integração: Regras de Negócio de Incidentes e Alertas', () => {
   let testMonitor;
@@ -56,7 +56,9 @@ describe('Integração: Regras de Negócio de Incidentes e Alertas', () => {
 
     // Validações de Transição de Estado
     expect(result.stateChanged).toBe(true);
-    expect(result.incident.status).toBe('OPEN');
+    expect((await prisma.incident.findUnique({ where: { id: result.incidentId } })).status).toBe(
+      'OPEN'
+    );
 
     // Validações de Persistência (Banco de Dados)
     const executions = await prisma.checkExecution.findMany({
@@ -71,10 +73,10 @@ describe('Integração: Regras de Negócio de Incidentes e Alertas', () => {
     // Validação de Integração (O serviço de alerta foi chamado com os dados certos?)
     expect(alertSpy).toHaveBeenCalledWith(
       testMonitor.id,
-      result.incident.id,
+      result.incidentId,
       'FALHA',
       'HTTP Error 500',
-      findAlertRecipient
+      expect.objectContaining({ name: testMonitor.name, url: testMonitor.url })
     );
 
     alertSpy.mockRestore(); // Limpa o espião para o próximo teste
@@ -124,8 +126,12 @@ describe('Integração: Regras de Negócio de Incidentes e Alertas', () => {
     const result = await processCheckResult(testMonitor.id, mockPingSucesso);
 
     expect(result.stateChanged).toBe(true);
-    expect(result.incident.status).toBe('RESOLVED');
-    expect(result.incident.resolvedAt).not.toBeNull();
+    expect((await prisma.incident.findUnique({ where: { id: result.incidentId } })).status).toBe(
+      'RESOLVED'
+    );
+    expect(
+      (await prisma.incident.findUnique({ where: { id: result.incidentId } })).resolvedAt
+    ).not.toBeNull();
 
     // Verifica se o banco guardou o registro de recuperação
     const alerts = await prisma.alert.findMany({
@@ -136,10 +142,10 @@ describe('Integração: Regras de Negócio de Incidentes e Alertas', () => {
     expect(alerts.length).toBe(2); // 1 de falha original, 1 de recuperação agora
     expect(alertSpy).toHaveBeenCalledWith(
       testMonitor.id,
-      result.incident.id,
+      result.incidentId,
       'RECUPERACAO',
       null,
-      findAlertRecipient
+      expect.objectContaining({ name: testMonitor.name, url: testMonitor.url })
     );
 
     alertSpy.mockRestore();

@@ -145,3 +145,4 @@ vite.config.ts.timestamp-*
 # Artefatos gerados da API importada
 /src/config/swagger-output.json
 /src/generated/prisma/
+/services/*/src/generated/

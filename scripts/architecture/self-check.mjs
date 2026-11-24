@@ -2,12 +2,12 @@ import { deepEqual, equal, match } from 'node:assert/strict';
 import { test } from 'node:test';
 import { violationsIn } from './check.mjs';
 
-const app = 'src/app.js';
-const database = 'src/config/database.js';
-const monitor = 'src/modules/monitoring/index.js';
-const monitoringPersistence = 'src/modules/monitoring/persistence.js';
-const incidents = 'src/modules/incidents/index.js';
-const privateIncident = 'src/modules/incidents/IncidentService.js';
+const app = 'services/incidents/src/app.js';
+const database = 'services/incidents/src/config/database.js';
+const monitor = 'services/incidents/src/modules/monitoring/index.js';
+const monitoringPersistence = 'services/incidents/src/modules/monitoring/persistence.js';
+const incidents = 'services/incidents/src/modules/incidents/index.js';
+const privateIncident = 'services/incidents/src/modules/incidents/IncidentService.js';
 const files = new Set([app, database, monitor, monitoringPersistence, incidents, privateIncident]);
 
 test('permite composição pública e acesso ao Prisma pela persistência', () => {
@@ -69,4 +69,20 @@ test('rejeita reexport de todos os símbolos e namespaces em pontos públicos', 
 
   const explicitExport = "export { default as incidentService } from './IncidentService.js'";
   deepEqual(violationsIn(incidents, explicitExport, files), []);
+});
+
+test('impede imports entre serviços e cliente Prisma no Gateway', () => {
+  const gateway = 'gateway/src/app.js';
+  const otherService = 'services/core/src/app.js';
+  const known = new Set([...files, gateway, otherService]);
+  match(
+    violationsIn(gateway, "import '../../services/core/src/app.js'", known)[0],
+    /unidades de implantação/
+  );
+  match(
+    violationsIn(incidents, "import '../../../../core/src/app.js'", known)[0],
+    /unidades de implantação/
+  );
+  match(violationsIn(gateway, "import '@prisma/client'", known)[0], /pacotes Prisma restritos/);
+  deepEqual(violationsIn(database, "import '../generated/prisma/index.js'", known), []);
 });

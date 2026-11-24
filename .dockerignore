@@ -5,3 +5,7 @@ node_modules
 coverage
 src/config/swagger-output.json
 src/generated/prisma
+**/node_modules
+**/.env
+**/.env.*
+**/src/generated

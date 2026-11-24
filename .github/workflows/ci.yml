@@ -2,7 +2,7 @@ name: CI da API
 
 on:
   push:
-    branches: [main, desafio-01]
+    branches: [main, desafio-03]
   pull_request:
     branches: [main]
 
@@ -11,76 +11,96 @@ permissions:
 
 jobs:
   build:
-    name: Geração, lint e testes de integração
+    name: Serviços, contratos e persistência
     runs-on: ubuntu-latest
     timeout-minutes: 15
-
     services:
-      postgres:
+      core-db:
         image: postgres:15-alpine
         env:
-          POSTGRES_USER: uptime_test
-          POSTGRES_PASSWORD: uptime_test
-          POSTGRES_DB: uptime_ci_test
-        ports:
-          - 5432/tcp
+          POSTGRES_USER: test_core
+          POSTGRES_PASSWORD: test_core
+          POSTGRES_DB: uptime_core_test
+        ports: [5432/tcp]
         options: >-
-          --health-cmd "pg_isready -h 127.0.0.1 -U uptime_test -d uptime_ci_test"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-
+          --health-cmd "pg_isready -h 127.0.0.1 -U test_core -d uptime_core_test"
+          --health-interval 3s --health-timeout 5s --health-retries 15
+      incidents-db:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: test_incidents
+          POSTGRES_PASSWORD: test_incidents
+          POSTGRES_DB: uptime_incidents_test
+        ports: [5432/tcp]
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U test_incidents -d uptime_incidents_test"
+          --health-interval 3s --health-timeout 5s --health-retries 15
     env:
       HUSKY: '0'
-      JWT_SECRET: uptime-ci-test-signing-key
-
+      JWT_SECRET: chave-jwt-exclusiva-do-teste
+      INTERNAL_SERVICE_TOKEN: credencial-entre-servicos-de-teste
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           persist-credentials: false
-
-      - name: Configurar Node.js 24
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '24'
           cache: npm
-
-      - name: Instalar dependências
-        run: npm ci
-
-      - name: Validar schema e gerar Prisma Client e Swagger
+      - run: npm ci
+      - name: Configurar bancos temporários
         run: |
-          npm exec -- prisma validate
-          npm exec -- prisma generate
-          npm run swagger
-          test -s src/config/swagger-output.json
-
-      - name: Executar lint
-        run: npm run lint
-
-      - name: Verificar fronteiras arquiteturais
-        run: npm run test:architecture
-
-      - name: Aplicar migrations
-        env:
-          DATABASE_URL: postgresql://uptime_test:uptime_test@127.0.0.1:${{ job.services.postgres.ports[5432] }}/uptime_ci_test?schema=public
-        run: npm run db:migrate
-
-      - name: Verificar inicialização da API e do scheduler
-        env:
-          DATABASE_URL: postgresql://uptime_test:uptime_test@127.0.0.1:${{ job.services.postgres.ports[5432] }}/uptime_ci_test?schema=public
-          PORT: '3199'
+          echo 'CORE_DATABASE_URL=postgresql://test_core:test_core@127.0.0.1:${{ job.services.core-db.ports[5432] }}/uptime_core_test' >> "$GITHUB_ENV"
+          echo 'INCIDENTS_DATABASE_URL=postgresql://test_incidents:test_incidents@127.0.0.1:${{ job.services.incidents-db.ports[5432] }}/uptime_incidents_test' >> "$GITHUB_ENV"
+      - name: Validar schemas e gerar clientes separados
         run: |
-          log="$(mktemp)"
-          node src/server.js >"$log" 2>&1 &
-          api_pid=$!
-          trap 'result=$?; kill "$api_pid" 2>/dev/null || true; wait "$api_pid" 2>/dev/null || true; cat "$log"; rm -f "$log"; exit "$result"' EXIT
-          curl --fail --silent --show-error --retry 5 --retry-connrefused --max-time 5 "http://127.0.0.1:$PORT/api/health"
-          curl --fail --silent --show-error --max-time 5 "http://127.0.0.1:$PORT/api/docs/" > /dev/null
-          grep -F 'Scheduler de Monitoramento iniciado.' "$log"
-
-      - name: Executar testes com cobertura
-        env:
-          DATABASE_URL: postgresql://uptime_test:uptime_test@127.0.0.1:${{ job.services.postgres.ports[5432] }}/uptime_ci_test?schema=public
-        run: npm test -- --coverage
+          npm run db:validate
+          npm run db:generate
+      - name: Lint, fronteiras e contratos
+        run: |
+          npm run lint
+          npm run test:architecture
+          npm run test:contracts
+          python3 -m venv "$RUNNER_TEMP/openapi"
+          "$RUNNER_TEMP/openapi/bin/python" -m pip install 'openapi-spec-validator==0.7.2'
+          "$RUNNER_TEMP/openapi/bin/python" -m openapi_spec_validator services/core/openapi/openapi.json services/incidents/openapi/openapi.json
+      - name: Migrar bancos e executar testes com cobertura
+        run: |
+          npm run db:migrate
+          npm test -- --coverage
+  compose:
+    name: Builds independentes e smoke do Compose
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      JWT_SECRET: chave-jwt-exclusiva-do-compose-ci
+      INTERNAL_SERVICE_TOKEN: credencial-interna-exclusiva-do-compose-ci
+      COMPOSE_PROJECT_NAME: uptime_d3_ci
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validar Compose e construir as imagens
+        run: |
+          docker compose config --quiet
+          docker compose build core
+          docker compose build incidents
+          docker compose build gateway
+      - name: Iniciar serviços separadamente e validar Gateway
+        run: |
+          docker compose up -d --wait core
+          docker compose stop core
+          docker compose up -d --wait incidents
+          docker compose up -d --wait core gateway
+          node scripts/smoke-compose.mjs
+          docker compose restart incidents
+          docker compose up -d --wait incidents
+          node scripts/smoke-compose.mjs
+      - name: Limpar o ambiente exclusivo da CI
+        if: always()
+        run: |
+          docker compose logs --tail 35
+          docker compose down --volumes

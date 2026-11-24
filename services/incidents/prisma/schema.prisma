@@ -1,0 +1,40 @@
+generator client {
+  provider = "prisma-client-js"
+  output = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum IncidentStatus {
+  OPEN
+  RESOLVED
+}
+
+model Incident {
+  id          String         @id @default(uuid())
+  monitorId   String
+  status      IncidentStatus @default(OPEN)
+  errorLog    String?
+  startedAt   DateTime       @default(now())
+  resolvedAt  DateTime?      // Nulo enquanto o incidente estiver aberto
+
+  alerts      Alert[]
+
+
+  @@map("incidents")
+}
+
+model Alert {
+  id         String   @id @default(uuid())
+  monitorId  String
+  incidentId String?
+  type       String   @default("EMAIL")
+  message    String
+  sentAt     DateTime @default(now())
+
+  incident   Incident? @relation(fields: [incidentId], references: [id], onDelete: SetNull)
+
+  @@map("alerts")
+}

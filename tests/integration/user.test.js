@@ -1,7 +1,7 @@
 // tests/integration/user.test.js
 import request from 'supertest';
-import app from '../../src/app.js';
-import prisma from '../../src/config/database.js';
+import app from '../support/gateway.js';
+import prisma from '../support/database.js';
 
 describe('Integração: Criação de Usuários', () => {
   // Limpa a tabela antes de iniciar a bateria de testes deste bloco

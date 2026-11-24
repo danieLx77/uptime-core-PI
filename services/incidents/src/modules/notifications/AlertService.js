@@ -1,0 +1,39 @@
+import prisma from './persistence.js';
+
+class AlertService {
+  /**
+   * Registra a intenção de envio de e-mail no banco e simula a saída no terminal.
+   */
+  async sendMockEmail(monitorId, incidentId, status, reason, monitor) {
+    let subject = '';
+    let message = '';
+
+    if (status === 'FALHA') {
+      subject = `[ALERTA CRÍTICO] O monitor "${monitor.name}" caiu`;
+      message = `Olá, ${monitor.ownerName}. Detectamos que o serviço associado à URL (${monitor.url}) parou de responder. Motivo: ${reason}`;
+    } else {
+      subject = `[RECUPERAÇÃO] O monitor "${monitor.name}" voltou a operar`;
+      message = `Olá, ${monitor.ownerName}. Boas notícias! O serviço associado à URL (${monitor.url}) voltou a responder com sucesso (200 OK).`;
+    }
+
+    // Persiste a notificação no banco de dados
+    const alert = await prisma.alert.create({
+      data: {
+        monitorId,
+        incidentId,
+        type: 'EMAIL',
+        message: `${subject} - ${message}`,
+      },
+    });
+
+    // Simula o disparo no terminal
+    console.log(`\n======================================================`);
+    console.log(`📧 [MOCK EMAIL DISPARADO]`);
+    console.log(`Assunto: ${subject}`);
+    console.log(`Mensagem: ${message}`);
+    console.log(`Status do Banco: Alerta salvo (ID: ${alert.id})`);
+    console.log(`======================================================\n`);
+  }
+}
+
+export default new AlertService();
