@@ -83,7 +83,7 @@ describe('Fluxo integrado de monitoramento, incidentes e notificações', () => 
 
     await request(app).get('/api/admin/incidents').set('Authorization', userAuth).expect(403);
 
-    const schedule = jest.spyOn(cron, 'schedule').mockImplementation(() => undefined);
+    const schedule = jest.spyOn(cron, 'schedule').mockReturnValue({ on: jest.fn() });
     let scheduledTick;
     try {
       startMonitoring();

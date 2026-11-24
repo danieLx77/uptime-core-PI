@@ -5,8 +5,29 @@ import prisma from './persistence.js';
 
 class SchedulerService {
   start(processResult) {
-    cron.schedule('* * * * *', () => this.runCycle(processResult), { noOverlap: true });
+    const task = cron.schedule(
+      '* * * * *',
+      async () => {
+        const started = performance.now();
+        console.info('[CRON] Ciclo de monitoramento iniciado.');
+        try {
+          await this.runCycle(processResult);
+        } finally {
+          console.info('[CRON] Ciclo de monitoramento encerrado.', {
+            durationMs: Math.round(performance.now() - started),
+          });
+        }
+      },
+      { noOverlap: true }
+    );
+    task.on('execution:overlap', ({ date }) => {
+      console.warn('[CRON] Tick descartado por sobreposição.', { scheduledAt: date.toISOString() });
+    });
+    task.on('execution:missed', () => {
+      console.warn('[CRON] O agendador detectou um tick perdido.');
+    });
     console.log('⏰ Scheduler de Monitoramento iniciado.');
+    return task;
   }
 
   async runCycle(processResult) {

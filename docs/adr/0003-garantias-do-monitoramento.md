@@ -18,3 +18,7 @@ URLs do usuário são acessadas pelo servidor. O banco antigo admitia incidentes
 O índice mantém históricos encerrados e interrompe a migration se houver aberturas duplicadas preexistentes. Nenhum saneamento automático altera o histórico. Verificações fora de ordem ainda são tratadas pela ordem em que chegam. A unicidade de uma transição não garante entrega do alerta. A rede do deploy deve reforçar a filtragem de saída e controlar destinos especiais da infraestrutura.
 
 Os testes habilitam somente uma origem de loopback exata sob `NODE_ENV=test`. Essa configuração pertence à suíte e não é disponibilizada pela API ou pelo Compose normal. Recuperação mantém resposta genérica ao solicitar um token, inclusive em erro de SMTP. A revisão de rate limiting, proteção de temporização e chaves assimétricas pode ocorrer junto à preparação de um deploy.
+
+## Adendo da revisão do D3
+
+O Compose opera com uma instância do Núcleo e a proteção contra sobreposição é local. Cada ciclo registra início, encerramento e duração. O agendador sinaliza sobreposição evitada e perda de tick. Um ciclo longo pode deixar checagens fora do horário previsto. A publicação assíncrona planejada para o D4 retira o HTTP com Incidentes do caminho do scheduler. Sondagens demoradas ainda exigem atenção. Consulte os sinais disponíveis no [guia operacional](../operations.md#ciclos-de-monitoramento).
