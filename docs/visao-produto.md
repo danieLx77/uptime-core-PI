@@ -6,16 +6,16 @@ A indisponibilidade de APIs e serviços web sem aviso pode afetar receita e oper
 
 ## Escopo atual
 
-Usuários autenticados cadastram URLs e configuram seus intervalos. A aplicação checa alvos ativos, guarda tempo de resposta e registra indisponibilidades e recuperações. Administradores consultam monitores, execuções, incidentes e alertas. A recuperação de senha usa SMTP. Os alertas operacionais são registrados e simulados no console.
+Usuários autenticados cadastram URLs HTTP ou HTTPS acessíveis publicamente e configuram seus intervalos. A aplicação checa alvos ativos, guarda tempo de resposta e registra indisponibilidades e recuperações. Administradores consultam monitores, execuções, incidentes e alertas. A recuperação de senha usa SMTP. Os alertas operacionais são registrados e simulados no console.
 
 ## Fluxo que atravessa contextos
 
 1. **Identidade e acesso** autentica o usuário que cadastra o monitor.
 2. **Monitoramento** agenda, realiza e registra as verificações HTTP.
 3. **Incidentes** abre uma ocorrência na primeira falha e a resolve quando o alvo volta a responder.
-4. **Notificações** registra alertas nas transições automáticas. As falhas repetidas mantêm o incidente aberto sem gerar novos alertas no ciclo sequencial.
+4. **Notificações** registra alertas nas transições automáticas. Cada monitor tem no máximo um incidente aberto. As falhas repetidas mantêm o incidente aberto até a recuperação.
 
-A aplicação roda como uma unidade, com [contextos delimitados](architecture.md). Uma falha no registro do alerta preserva o incidente, que representa indisponibilidade observada.
+O produto tem uma entrada pública única e dois serviços implantáveis, com [contextos delimitados](architecture.md). O Núcleo comunica os resultados ao serviço de Incidentes. Uma falha no registro do alerta preserva o incidente, que representa indisponibilidade observada.
 
 ## Transação candidata para o D5
 

@@ -1,66 +1,53 @@
-# uptime-core-PI
-Projeto da disciplina de Projeto Integrador I da Universidade Federal de Lavras.
+# Uptime Core PI
 
-API de monitoramento HTTP com cadastro de monitores, checagens agendadas, histórico de execuções e incidentes. A base importada usa Node.js 24, Express, Prisma e PostgreSQL. A atribuição original está em [LICENSE.uptime-core-api](LICENSE.uptime-core-api).
+Projeto de monitoramento HTTP da disciplina Projeto Integrador I da Universidade Federal de Lavras. Usuários cadastram monitores. O Núcleo verifica o alvo e persiste o resultado. Incidentes acompanha indisponibilidade e registra alertas simulados. O Gateway fornece a entrada pública.
 
 - [Visão do produto](docs/visao-produto.md)
 - [Equipe](docs/equipe.md)
-- [ADR 0000 — Registro de decisões de arquitetura](docs/adr/0000-registro-de-decisoes.md)
+- [Arquitetura e conformidade do D3](docs/architecture.md)
+- [Guia de desenvolvimento](docs/development.md)
+- [Roteiro da vitrine](docs/vitrine-d3.md)
+- [ADR 0002 · Decomposição em dois serviços](docs/adr/0002-decomposicao-d3.md)
+- [Licença e atribuição da API original](LICENSE.uptime-core-api)
 
-## Arquitetura
+## Executar com Docker Compose
 
-O código em `src/modules/` forma um monólito modular com Identidade e acesso, Monitoramento, Incidentes e Notificações. A composição HTTP está em `src/app.js` e `src/routes/adminRoutes.js`. A composição do ciclo fica em `src/monitoringWorkflow.js`.
+Requisitos: Docker com Compose v2. Para executar verificações fora dos contêineres, use Node.js 24 e npm.
 
-- [Arquitetura, contextos e diagramas C4](docs/architecture.md)
-- [Domínio e Event Storming](docs/dominio.md)
-- [ADR 0001 — Monólito modular](docs/adr/0001-monolito-modular.md)
-- [Vitrine do D2](docs/vitrine-d2.md)
-
-## Ambiente de desenvolvimento
-
-Use Node.js 24, npm e um PostgreSQL dedicado ao Uptime Core PI. Se usar Docker para o banco, confira se a porta `5432` e o nome de contêiner do [Compose](docker-compose.yml) estão livres.
+Copie `.env.example` para `.env` se precisar criar a configuração. Defina **dois valores aleatórios distintos** em `JWT_SECRET` e `INTERNAL_SERVICE_TOKEN`. Use credenciais separadas para os dois bancos. Os valores de banco do exemplo servem ao ambiente local. Ative SMTP no Núcleo apenas para usar recuperação de senha pelo canal real.
 
 ```bash
-docker compose up -d --wait postgres_db
 cp -n .env.example .env
+docker compose up --build --wait
+node scripts/smoke-compose.mjs
+```
+
+O smoke cria e remove um usuário e um monitor de teste. Use-o em uma composição descartável. Se alterar a porta padrão, configure `GATEWAY_URL` para o smoke.
+
+| Entrada pelo Gateway | Caminho |
+|---|---|
+| Apresentação da API | `http://localhost:3000/api` |
+| Health do Núcleo | `http://localhost:3000/api/health` |
+| Health do Gateway | `http://localhost:3000/gateway/health` |
+| Swagger UI | `http://localhost:3000/api/docs/` |
+| Contratos JSON | `/api/docs/core.json`, `/api/docs/incidents.json` |
+
+Compose executa as migrations de cada serviço durante a inicialização. Os bancos e serviços de aplicação usam portas internas. Só o Gateway publica uma porta. Para validar a inicialização independente, execute `docker compose up -d --build --wait core` ou `docker compose up -d --build --wait incidents` em um projeto Compose isolado.
+
+## Testes
+
+Em `.env.test`, configure `CORE_DATABASE_URL` e `INCIDENTS_DATABASE_URL` para bancos **descartáveis e distintos** e defina chaves exclusivas de teste para `JWT_SECRET` e `INTERNAL_SERVICE_TOKEN`. O override de teste mapeia os PostgreSQL para `127.0.0.1:55431` e `:55432`. As suítes removem fixtures dos bancos configurados.
+
+```bash
+docker compose -p uptime_d3_test -f docker-compose.yml -f compose.test.yaml up -d --wait core-db incidents-db
 HUSKY=0 npm ci
-```
-
-Para executar a API no host, ajuste `DATABASE_URL` em `.env` para `postgresql://admin:admin123@127.0.0.1:5432/api_monitor_db?schema=public` se estiver usando o banco local acima. Defina um `JWT_SECRET` próprio. Configure SMTP próprio ou um capturador local se for testar a recuperação de senha.
-
-```bash
-npm exec -- prisma generate
-npm run db:migrate
-npm run swagger
-npm start
-```
-
-Por padrão, a API responde em `http://localhost:3000/api/health`. A interface Swagger fica em `http://localhost:3000/api/docs`. Escolha o servidor local na interface.
-
-## Testes de integração
-
-Use um banco descartável separado do banco da API. Os testes apagam registros do banco configurado. O serviço `postgres_test` usa a porta `5433` e um volume separado no Compose.
-
-```bash
-docker compose up -d --wait postgres_test
-```
-
-Crie `.env.test` com uma `DATABASE_URL` que aponte para o banco descartável e confirme o destino antes de executar a suíte. Para o serviço `postgres_test` acima, use estes valores estritamente locais.
-
-```dotenv
-DATABASE_URL=postgresql://admin:admin@127.0.0.1:5433/api_monitor_test_db?schema=public
-JWT_SECRET=uptime-local-test-signing-key
-```
-
-```bash
-npm exec -- prisma generate
-npm run swagger
+npm run db:validate
+npm run db:generate
+npm run test:db-setup
 npm run lint
 npm run test:architecture
-env -u DATABASE_URL npm run test:db-setup
-env -u DATABASE_URL npm test -- --coverage
+npm run test:contracts
+npm test -- --coverage
 ```
 
-A [CI da API](.github/workflows/ci.yml) roda em PRs para `main` e em pushes para `main` e `desafio-01`. Ela usa Node.js 24 e um PostgreSQL descartável próprio do job para aplicar migrations e rodar os testes com cobertura. A verificação arquitetural também pode rodar localmente sem PostgreSQL.
-
-A documentação de [API](docs/api.md), [desenvolvimento](docs/development.md) e [operação](docs/operations.md) foi importada da origem e inclui referências históricas ao GitHub, SonarCloud e Render originais. Para o ambiente acadêmico, siga os comandos acima.
+O [guia de desenvolvimento](docs/development.md) lista as variáveis, a execução individual e o procedimento de transferência dos dados do D2. Consulte [Arquitetura](docs/architecture.md) para conhecer as garantias de concorrência, a política de checagem HTTP e as falhas parciais esperadas.
