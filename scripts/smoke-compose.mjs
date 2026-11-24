@@ -60,10 +60,13 @@ async function checkIncidentsRecovery(auth, monitorId, userId) {
 
     stopped = true;
     compose('stop', '-t', '3', 'incidents');
-    await call(history, 502, { token });
+    const outage = await gatewayRequest(history, { token });
+    const error = await outage.json();
+    assert.ok([502, 504].includes(outage.status), `GET ${history}: ${outage.status}`);
+    assert.equal(typeof error.error, 'string');
     await call('/api/health', 200);
     await call(`/api/monitors/${monitorId}`, 200, { token });
-    console.log('502 · Incidentes indisponível. 200 · Núcleo continua operacional.');
+    console.log(`${outage.status} · Incidentes indisponível. 200 · Núcleo continua operacional.`);
 
     compose('up', '-d', '--wait', '--wait-timeout', '45', 'incidents');
     stopped = false;
@@ -79,17 +82,22 @@ async function checkIncidentsRecovery(auth, monitorId, userId) {
   }
 }
 
-async function call(path, status, { method = 'GET', body, token } = {}) {
-  const response = await fetch(new URL(path, base), {
+async function gatewayRequest(path, { method = 'GET', body, token } = {}) {
+  return fetch(new URL(path, base), {
     method,
     headers: {
       ...(body ? { 'content-type': 'application/json' } : {}),
       ...(token ? { authorization: `Bearer ${token}` } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
-    signal: AbortSignal.timeout(5000),
+    // O cliente precisa aguardar o prazo de 8 s do Gateway para observar um 504.
+    signal: AbortSignal.timeout(12_000),
   });
-  assert.equal(response.status, status, `${method} ${path}`);
+}
+
+async function call(path, status, options) {
+  const response = await gatewayRequest(path, options);
+  assert.equal(response.status, status, `${options?.method ?? 'GET'} ${path}`);
   return status === 204 ? null : response.json();
 }
 

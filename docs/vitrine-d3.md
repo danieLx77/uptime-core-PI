@@ -27,6 +27,6 @@ O teste do fluxo usa HTTP de loopback controlado e dispensa SMTP. O smoke usa um
 | Etapa da recuperação | Comportamento esperado |
 |---|---|
 | Antes da interrupção | `GET /api/admin/incidents?monitorId=<id>` retorna `200` com o incidente de demonstração e sua projeção do monitor. |
-| `docker compose stop -t 3 incidents` | A mesma consulta autenticada retorna `502`. |
+| `docker compose stop -t 3 incidents` | A mesma consulta autenticada retorna `502` se a conexão falhar ou `504` se o Gateway atingir seu prazo de oito segundos. |
 | Incidentes parado | `GET /api/health` e `GET /api/monitors/<id>` no Gateway retornam `200`. |
 | `docker compose up -d --wait --wait-timeout 45 incidents` | O script espera o health do serviço. A consulta administrativa retorna `200` com o mesmo incidente e a mesma projeção do monitor. |
