@@ -1,10 +1,11 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { SourceTextModule } from 'node:vm';
+import { parse } from 'acorn';
 
 const contextPattern = /^src\/modules\/([^/]+)\//;
 const database = 'src/config/database.js';
+const prismaPackage = /^@prisma\/(?:client|adapter-pg)(?:\/|$)/;
 const compositionFiles = new Set([
   'src/app.js',
   'src/routes/adminRoutes.js',
@@ -12,12 +13,24 @@ const compositionFiles = new Set([
 ]);
 
 export function violationsIn(file, source, knownFiles) {
-  const module = new SourceTextModule(source, { identifier: file });
+  const { body } = parse(source, { ecmaVersion: 'latest', sourceType: 'module' });
   const owner = file.match(contextPattern)?.[1];
+  const publicEntry = owner && file === `src/modules/${owner}/index.js`;
   const violations = [];
 
-  for (const { specifier } of module.moduleRequests) {
+  for (const statement of body) {
+    if (!statement.source) continue;
+
+    const specifier = statement.source.value;
     const label = `${file} → ${specifier}`;
+    if (publicEntry && statement.type === 'ExportAllDeclaration') {
+      violations.push(`${label}: pontos públicos devem nomear cada export`);
+    }
+
+    if (prismaPackage.test(specifier) && file !== database) {
+      violations.push(`${label}: pacotes Prisma restritos à configuração do banco`);
+    }
+
     if (!specifier.startsWith('./') && !specifier.startsWith('../')) {
       if (/^[#/.]/.test(specifier) || specifier.startsWith('file:')) {
         violations.push(`${label}: use caminho relativo para arquivos internos de src`);

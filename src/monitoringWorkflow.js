@@ -26,7 +26,3 @@ export async function processCheckResult(monitorId, result) {
 export function startMonitoring() {
   scheduler.start(processCheckResult);
 }
-
-export function runMonitoringCycle(minute) {
-  return scheduler.runCycle(processCheckResult, minute);
-}

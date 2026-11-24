@@ -4,12 +4,13 @@ import prisma from './persistence.js';
 
 class SchedulerService {
   start(processResult) {
-    console.log('⏰ Scheduler de Monitoramento iniciado.');
     cron.schedule('* * * * *', () => this.runCycle(processResult));
+    console.log('⏰ Scheduler de Monitoramento iniciado.');
   }
 
-  async runCycle(processResult, currentMinute = new Date().getMinutes()) {
+  async runCycle(processResult) {
     try {
+      const currentMinute = new Date().getMinutes();
       const activeMonitors = await prisma.monitor.findMany({ where: { status: 'ACTIVE' } });
       const monitorsToRun = activeMonitors.filter(
         (monitor) => currentMinute % monitor.interval_minutes === 0

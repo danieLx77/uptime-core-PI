@@ -31,6 +31,6 @@ A persistência da execução precede a avaliação das regras de transição. S
 
 ## Teste ponta a ponta
 
-[monitoringWorkflow.test.js](../tests/integration/monitoringWorkflow.test.js) usa cadastro e login pela API, PostgreSQL e um servidor de teste local. Ele roda o método usado pelo cron com minutos definidos pelo teste. O alvo responde `200 → 503 → 503 → 200`. O teste confere a seleção pelo intervalo, quatro execuções, um incidente, dois alertas, recuperação e a rejeição da consulta administrativa para usuário comum.
+[monitoringWorkflow.test.js](../tests/integration/monitoringWorkflow.test.js) usa cadastro e login pela API, PostgreSQL e um servidor de teste local. Ele inicia a composição do scheduler, confere o agendamento a cada minuto e aciona o callback registrado com minutos controlados. O alvo responde `200 → 503 → 503 → 200`. O teste confere a seleção pelo intervalo, quatro execuções, um incidente, dois alertas, recuperação e a rejeição da consulta administrativa para usuário comum.
 
 A suíte [incident.test.js](../tests/integration/incident.test.js) exercita o mesmo fluxo de persistência e alertas com resultados sintéticos, incluindo timeout sem código HTTP. Para execução, use o banco descartável conforme o [README](../README.md).

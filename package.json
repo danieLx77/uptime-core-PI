@@ -16,7 +16,7 @@
     "test": "cross-env NODE_OPTIONS=--experimental-vm-modules dotenv -e .env.test -- jest --runInBand --forceExit",
     "test:watch": "cross-env NODE_OPTIONS=--experimental-vm-modules dotenv -e .env.test -- jest --watch --runInBand --forceExit",
     "test:db-setup": "dotenv -e .env.test -- npx prisma migrate deploy",
-    "test:architecture": "node --experimental-vm-modules scripts/architecture/check.mjs && node --experimental-vm-modules --test --test-isolation=none scripts/architecture/self-check.mjs"
+    "test:architecture": "node scripts/architecture/check.mjs && node --test --test-isolation=none scripts/architecture/self-check.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.7.0",
@@ -32,6 +32,7 @@
     "swagger-ui-express": "^5.0.1"
   },
   "devDependencies": {
+    "acorn": "^8.16.0",
     "cross-env": "^10.1.0",
     "dotenv": "^17.4.2",
     "dotenv-cli": "^11.0.0",

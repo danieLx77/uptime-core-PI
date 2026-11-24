@@ -1,10 +1,12 @@
 import { once } from 'node:events';
 import { createServer } from 'node:http';
+import { jest } from '@jest/globals';
 import jwt from 'jsonwebtoken';
+import cron from 'node-cron';
 import request from 'supertest';
 import app from '../../src/app.js';
 import prisma from '../../src/config/database.js';
-import { runMonitoringCycle } from '../../src/monitoringWorkflow.js';
+import { startMonitoring } from '../../src/monitoringWorkflow.js';
 
 describe('Fluxo integrado de monitoramento, incidentes e notificações', () => {
   let target;
@@ -34,7 +36,7 @@ describe('Fluxo integrado de monitoramento, incidentes e notificações', () => 
     await prisma.$disconnect();
   });
 
-  it('registra sucesso, falha, repetição e recuperação a partir de um monitor cadastrado pela API', async () => {
+  it('registra sucesso, falha, repetição e recuperação pelo callback do cron', async () => {
     const name = 'Operador do fluxo D2';
     const email = 'operador-d2@example.test';
     const password = 'senha-descartavel-d2';
@@ -75,15 +77,35 @@ describe('Fluxo integrado de monitoramento, incidentes e notificações', () => 
 
     await request(app).get('/api/admin/incidents').set('Authorization', userAuth).expect(403);
 
-    await runMonitoringCycle(1);
+    const schedule = jest.spyOn(cron, 'schedule').mockImplementation(() => undefined);
+    let scheduledTick;
+    try {
+      startMonitoring();
+      expect(schedule).toHaveBeenCalledTimes(1);
+      expect(schedule).toHaveBeenCalledWith('* * * * *', expect.any(Function));
+      [[, scheduledTick]] = schedule.mock.calls;
+    } finally {
+      schedule.mockRestore();
+    }
+
+    function tickAt(minute) {
+      const clock = jest.spyOn(Date.prototype, 'getMinutes').mockReturnValue(minute);
+      try {
+        return scheduledTick();
+      } finally {
+        clock.mockRestore();
+      }
+    }
+
+    await tickAt(1);
     expect(requestsToTarget).toBe(0);
 
-    await runMonitoringCycle(5);
+    await tickAt(5);
     expect(await list('incidents')).toEqual([]);
     expect(await list('alerts')).toEqual([]);
 
     targetStatus = 503;
-    await runMonitoringCycle(10);
+    await tickAt(10);
     const opened = await list('incidents');
     expect(opened).toHaveLength(1);
     expect(opened[0]).toMatchObject({
@@ -102,12 +124,12 @@ describe('Fluxo integrado de monitoramento, incidentes e notificações', () => 
       message: expect.stringContaining('[ALERTA CRÍTICO]'),
     });
 
-    await runMonitoringCycle(15);
+    await tickAt(15);
     expect((await list('incidents')).map(({ id }) => id)).toEqual([opened[0].id]);
     expect((await list('alerts')).map(({ id }) => id)).toEqual([firstAlerts[0].id]);
 
     targetStatus = 200;
-    await runMonitoringCycle(20);
+    await tickAt(20);
     const resolved = await list('incidents');
     expect(resolved).toHaveLength(1);
     expect(resolved[0]).toMatchObject({
